@@ -1,7 +1,7 @@
 import { useMemo, useState, type ReactNode } from "react";
 
-import { useLeaderboard } from "../../data/store";
-import { Card, Empty, Money } from "../../ui/components";
+import { useLeaderboard, useStore } from "../../data/store";
+import { Card, Empty, Loading, Money } from "../../ui/components";
 
 type SortKey =
   | "displayName"
@@ -59,6 +59,7 @@ const COLUMNS: { key: SortKey; label: string }[] = [
  */
 export function StatsScreen(): ReactNode {
   const rows = useLeaderboard();
+  const { isLoading } = useStore();
   const [sort, setSort] = useState<SortKey>("netCents");
   const [showLegend, setShowLegend] = useState(false);
 
@@ -94,10 +95,12 @@ export function StatsScreen(): ReactNode {
     [enriched, sort],
   );
 
-  if (sorted.length === 0) {
+  if (isLoading || sorted.length === 0) {
     return (
       <Card title="Stats">
-        <Empty>Play a game and the numbers start here.</Empty>
+        {/* Everything here is a fold over games that haven't arrived yet, so an
+            empty table is the loading state and the never-played state both. */}
+        {isLoading ? <Loading rows={5} /> : <Empty>Play a game and the numbers start here.</Empty>}
       </Card>
     );
   }

@@ -1,0 +1,89 @@
+/*
+ * Per-player twenties (§3.5 step 4).
+ *
+ * A collapsed row per team, expanding to a stepper per player. It sits on the
+ * fast path — the entry screen is used one-handed, standing at a board — so the
+ * collapsed state is one tap target and nothing else, and the row only exists
+ * at all when that team actually sank a twenty.
+ */
+
+.twenties {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-xs);
+  margin-top: var(--gap-sm);
+}
+
+/*
+ * Entry-screen rhythm. The rows slot in between the board and *Finish round*,
+ * so they inherit the gap the board expects below it and hand the commit button
+ * the space `app.css` gives it when they aren't there.
+ */
+.scorer + .twenties,
+.scorer + .overlay + .twenties {
+  margin-top: 1.2rem;
+}
+
+.twenties + .btn--lg {
+  margin-top: 1.2rem;
+}
+
+.twenties__team {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg-raised);
+  overflow: hidden;
+}
+
+/* The whole collapsed row is the target — it has to be hittable without
+   looking, like everything else on this screen. */
+.twenties__head {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-sm);
+  width: 100%;
+  min-height: var(--tap);
+  padding: 0 var(--gap-sm);
+  border: 0;
+  background: none;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.twenties__caret {
+  width: 0.9rem;
+  color: var(--ink-faint);
+  font-size: 0.8rem;
+}
+
+.twenties__label {
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+/* What was entered so far, or the nudge to enter it. Truncates rather than
+   wrapping: the row must stay one line tall at every name length. */
+.twenties__summary {
+  margin-left: auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.8rem;
+  color: var(--ink-faint);
+}
+
+.twenties__players {
+  padding: 0 var(--gap-sm) var(--gap-xs);
+}
+
+/* A warning, never a block (§3.5) — it says the two numbers disagree and lets
+   you commit anyway. */
+.twenties__warn {
+  margin: 0;
+  padding: 0 var(--gap-sm) var(--gap-sm);
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--negative);
+}

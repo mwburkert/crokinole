@@ -97,6 +97,17 @@ export interface BoardScorerProps {
   perTeam: number;
   colorA: DiscColor;
   colorB: DiscColor;
+  /**
+   * Replay a board rather than place one.
+   *
+   * Positions are stored, and storing them was a deliberate exception to
+   * "nothing derived is stored" (§3.5) — bought specifically so a round can be
+   * looked at again. This is that view: no piles (there is nothing left to
+   * place), no active colour (both sides are equally finished), and every
+   * pointer ignored. It is the same renderer as the live board on purpose; a
+   * second one would be a second board to keep in step.
+   */
+  readOnly?: boolean;
 }
 
 export function BoardScorer({
@@ -105,6 +116,7 @@ export function BoardScorer({
   perTeam,
   colorA,
   colorB,
+  readOnly = false,
 }: BoardScorerProps): ReactNode {
   const [active, setActive] = useState<DiscColor>(colorA);
   const [drag, setDrag] = useState<Drag | null>(null);
@@ -241,6 +253,10 @@ export function BoardScorer({
     region === "twenty" ? 20 : region === "fifteen" ? 15 : region === "ten" ? 10 : region === "five" ? 5 : 0;
 
   const handleDown = (event: PointerEvent, source: Source, color: DiscColor): void => {
+    // The single entry point for every press on this board — bare surface,
+    // pile, stash or placed disc — so a replay is made inert here rather than
+    // relying on the CSS that also switches it off.
+    if (readOnly) return;
     const point = pointAt(event);
     if (!point) return;
     // setPointerCapture throws NotFoundError for a pointer id the browser
@@ -416,6 +432,7 @@ export function BoardScorer({
         ref={svgRef}
         viewBox={`0 0 200 ${VIEW}`}
         className="scorer__svg"
+        style={readOnly ? { pointerEvents: "none" } : undefined}
         onPointerDown={(event) => {
           // Children run first and claim the press; anything left is a tap on
           // bare board, which places a disc of the active colour.
@@ -449,8 +466,9 @@ export function BoardScorer({
         <Stash x={9} color={colorA} count={twentiesOf(colorA)} onDown={handleDown} />
         <Stash x={191} color={colorB} count={twentiesOf(colorB)} onDown={handleDown} rightAligned />
 
-        {/* One pile per colour: tap selects, hold-and-drag takes a disc. */}
-        {PILES.map((pile, index) => {
+        {/* One pile per colour: tap selects, hold-and-drag takes a disc. A
+            replayed round has none left to take, so they simply aren't there. */}
+        {(readOnly ? [] : PILES).map((pile, index) => {
           const color = pile.team === "A" ? colorA : colorB;
           const view = toView(pile.x, pile.y);
           return (
@@ -473,7 +491,9 @@ export function BoardScorer({
             too showed the same disc in two places at once. */}
         {discs.filter((disc) => disc.region !== "twenty").map((disc) => {
           const view = toView(disc.x, disc.y);
-          const isActive = disc.color === active;
+          // Nothing is inert in a replay — the shrink-and-fade is there to keep
+          // 24 discs legible while you place them, and both sides are finished.
+          const isActive = readOnly || disc.color === active;
           const isDragging = drag?.movingId === disc.id;
           return (
             <circle
@@ -483,7 +503,9 @@ export function BoardScorer({
               r={isDragging ? DISC_RADIUS * 0.9 : isActive ? DISC_RADIUS * 1.15 : DISC_RADIUS * 0.75}
               className={`scorer__disc scorer__disc--${disc.color}${isDragging ? " is-dragging" : ""}`}
               opacity={isDragging ? 0.55 : isActive ? 1 : 0.5}
-              style={{ pointerEvents: isActive ? "auto" : "none" }}
+              // `pointer-events` is inherited, so the `none` set on the <svg>
+              // for a replay would be undone right here by an explicit `auto`.
+              style={{ pointerEvents: !readOnly && isActive ? "auto" : "none" }}
               onPointerDown={(event) =>
                 handleDown(event, { kind: "disc", id: disc.id }, disc.color)
               }

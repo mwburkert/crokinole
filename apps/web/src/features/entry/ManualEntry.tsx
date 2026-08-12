@@ -1,10 +1,15 @@
 import {
   discsPerTeam,
+  discsUsed,
   roundPoints,
+  type DiscColor,
   type RingCounts,
   type ScoringConfig,
 } from "@crokinole/core";
 import { useState, type ReactNode } from "react";
+
+/** A side's colour, as a column heading. */
+const labelFor = (color: DiscColor): string => (color === "black" ? "Black" : "White");
 
 const RINGS: { key: keyof RingCounts; label: string }[] = [
   { key: "twenties", label: "20" },
@@ -17,6 +22,19 @@ export interface ManualEntryProps {
   config: ScoringConfig;
   a: RingCounts;
   b: RingCounts;
+  /**
+   * Which colour each side is playing this game.
+   *
+   * ⚠️ Load-bearing, not decoration. These columns were labelled "Black" and
+   * "White" as constants while writing to teams A and B — but which side plays
+   * black is a per-game choice ("Colours" on the new-game screen). Flip it and
+   * the labels lied: the black team's score, typed into the box marked Black,
+   * was recorded against the white team, inverting the round winner, the match
+   * points and the settlement. The board scorer was immune because it works by
+   * colour, so only the typed path — the "just log the number" path — was wrong.
+   */
+  colorA: DiscColor;
+  colorB: DiscColor;
   /** `totals` set means score-only: no section detail, so no board placement. */
   onApply: (next: { a: RingCounts; b: RingCounts } | { totals: { a: number; b: number } }) => void;
   onClose: () => void;
@@ -27,6 +45,31 @@ export interface ManualEntryProps {
   roundCount: number;
   /** Ask the parent to switch which round is loaded into `a` / `b`. */
   onNavigate: (index: number) => void;
+
+  /**
+   * Highest round you may page forward to.
+   *
+   * Only set on a finished game, which has no live round to land on — without
+   * it "next" walks off the end of the match into an empty round in play that
+   * doesn't exist.
+   */
+  maxIndex?: number;
+
+  /**
+   * Detail the parent owns, shown above the buttons — the board this round was
+   * played on, and who sank its twenties. It lives out here because it belongs
+   * to the round rather than to the counts, and because the parent is what
+   * writes it.
+   */
+  children?: ReactNode;
+  /**
+   * True when that parent-owned detail has unsaved changes.
+   *
+   * Save is gated on something having actually changed, and `dirty` below can
+   * only see the counts — so without this, attributing a twenty to a partner
+   * and nothing else leaves the only button that would record it disabled.
+   */
+  extraDirty?: boolean;
 }
 
 /**
@@ -39,17 +82,24 @@ export interface ManualEntryProps {
  * It doubles as the scoreboard's back-catalogue: page back through committed
  * rounds to fix one that was typed wrong, then page forward to the live round.
  * The board behind the overlay stays on the live round throughout — only this
- * sheet moves, so a correction never disturbs the round in play.
+ * sheet moves, so a correction never disturbs the round in play. A committed
+ * round's own board and twenties come in through `children`, from the parent
+ * that owns them.
  */
 export function ManualEntry({
   config,
   a,
   b,
+  colorA,
+  colorB,
   onApply,
   onClose,
   roundIndex,
   roundCount,
   onNavigate,
+  maxIndex,
+  children,
+  extraDirty = false,
 }: ManualEntryProps): ReactNode {
   const [draftA, setDraftA] = useState<RingCounts>({ ...a });
   const [draftB, setDraftB] = useState<RingCounts>({ ...b });
@@ -98,6 +148,8 @@ export function ManualEntry({
 
   /** The live round sits one past the committed ones; everything below is history. */
   const isLive = roundIndex === roundCount;
+  /** Nothing further forward to page to — the live round, or the last of a finished match. */
+  const atLatest = isLive || (maxIndex !== undefined && roundIndex >= maxIndex);
   const budget = discsPerTeam(config);
   const usingTotals = totalA !== "" || totalB !== "";
 
@@ -108,7 +160,24 @@ export function ManualEntry({
     left.fives === right.fives;
 
   /** Nothing to apply until something actually differs. */
-  const dirty = usingTotals || !same(draftA, baseline.a) || !same(draftB, baseline.b);
+  const dirty =
+    extraDirty || usingTotals || !same(draftA, baseline.a) || !same(draftB, baseline.b);
+
+  /**
+   * More discs typed than exist.
+   *
+   * The server refuses these outright (`too_many_discs` is a blocking error in
+   * core's `validateGame`), and the seam's writes are fire-and-forget — so
+   * without this the round was accepted here, thrown away there, and the entry
+   * screen showed the between-rounds scorecard as though it had committed. The
+   * match score simply didn't move and the numbers were gone. Blocked at the
+   * button instead, where there is something to point at.
+   *
+   * Totals-only entry is exempt: it makes no claim about discs at all.
+   */
+  const overBudget =
+    !usingTotals &&
+    (discsUsed(draftA) + gutterA > budget || discsUsed(draftB) + gutterB > budget);
 
   const column = (
     label: string,
@@ -227,7 +296,7 @@ export function ManualEntry({
           type="button"
           className="btn btn--ghost"
           aria-label="Next round"
-          disabled={isLive}
+          disabled={atLatest}
           onClick={() => onNavigate(roundIndex + 1)}
         >
           →
@@ -235,10 +304,15 @@ export function ManualEntry({
       </div>
 
       <div className="manual__cols">
-        {column("Black", draftA, setDraftA, gutterA, setGutterA)}
-        {column("White", draftB, setDraftB, gutterB, setGutterB)}
+        {column(labelFor(colorA), draftA, setDraftA, gutterA, setGutterA)}
+        {column(labelFor(colorB), draftB, setDraftB, gutterB, setGutterB)}
       </div>
 
+      {overBudget ? (
+        <p className="manual__warn" role="alert">
+          That's more than {budget} discs a side. Fix the counts, or log totals only.
+        </p>
+      ) : null}
       <p className="faint" style={{ margin: "0.5rem 0 0.25rem" }}>
         {budget} discs a side. Or skip the detail and log totals only:
       </p>
@@ -246,20 +320,22 @@ export function ManualEntry({
         <input
           className="manual__field num"
           inputMode="numeric"
-          placeholder="Black"
+          placeholder={labelFor(colorA)}
           value={totalA}
-          aria-label="Black total"
+          aria-label={`${labelFor(colorA)} total`}
           onChange={(event) => setTotalA(event.target.value)}
         />
         <input
           className="manual__field num"
           inputMode="numeric"
-          placeholder="White"
+          placeholder={labelFor(colorB)}
           value={totalB}
-          aria-label="White total"
+          aria-label={`${labelFor(colorB)} total`}
           onChange={(event) => setTotalB(event.target.value)}
         />
       </div>
+
+      {children}
 
       <div className="row" style={{ marginTop: "0.75rem", justifyContent: "space-between" }}>
 
@@ -291,7 +367,7 @@ export function ManualEntry({
             setTotalA("");
             setTotalB("");
           }}
-          disabled={!dirty}
+          disabled={!dirty || overBudget}
         >
           {isLive ? "Apply" : `Save round ${roundIndex + 1}`}
         </button>

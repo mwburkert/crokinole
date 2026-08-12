@@ -10,5 +10,15 @@
     "types": ["vite/client"]
   },
   "include": ["src/**/*.ts", "src/**/*.tsx", "vite.config.ts"],
-  "references": [{ "path": "../../packages/core" }]
+  "references": [
+    { "path": "../../packages/core" },
+    /*
+     * `store.tsx` imports `convex/_generated/api`, whose declarations point at
+     * the Convex sources. Without this reference TypeScript pulls those sources
+     * into this project, which breaks `rootDir` and scatters emitted `.d.ts`
+     * files next to them. With it, those imports redirect to the Convex
+     * project's built declarations.
+     */
+    { "path": "../../convex/tsconfig.build.json" }
+  ]
 }

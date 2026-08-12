@@ -21,6 +21,9 @@ export function toCoreRound(doc: Doc<"rounds">): Round {
     ...(doc.pointsOverride ? { pointsOverride: doc.pointsOverride } : {}),
     ...(doc.resultOverride ? { resultOverride: doc.resultOverride } : {}),
     ...(doc.playerStats ? { playerStats: doc.playerStats } : {}),
+    // Positions come back so a board can be replayed, which is the only reason
+    // storing them was worth the exception to §3.2.1 in the first place.
+    ...(doc.discs ? { discs: doc.discs } : {}),
   };
 }
 
@@ -82,17 +85,24 @@ export async function loadAllGames(
   return out;
 }
 
-/** Append to the audit trail. Money is involved; know who changed what. */
+/**
+ * Append to the audit trail. Money is involved; know who changed what.
+ *
+ * 🕐 `actorPlayerId` is null for every call made under the shared passphrase —
+ * one shared secret carries no identity, so there is no person to name. The
+ * field is omitted rather than filled with a stand-in that would read as a
+ * claim about who did it.
+ */
 export async function recordEvent(
   ctx: MutationCtx,
   gameId: Id<"games">,
-  actorPlayerId: Id<"players">,
+  actorPlayerId: Id<"players"> | null,
   kind: string,
   summary: string,
 ): Promise<void> {
   await ctx.db.insert("gameEvents", {
     gameId,
-    actorPlayerId,
+    ...(actorPlayerId ? { actorPlayerId } : {}),
     kind,
     summary,
     at: Date.now(),
