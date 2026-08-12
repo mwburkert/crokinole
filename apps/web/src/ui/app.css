@@ -1074,7 +1074,7 @@
    at full width the board alone ate 470px of an 852px viewport. */
 .scorer__svg {
   width: 100%;
-  max-width: 19rem;
+  max-width: 21.5rem;
   margin: 0 auto;
   display: block;
   touch-action: none; /* the board owns the gesture; the page must not scroll under it */
@@ -1360,4 +1360,14 @@ html { scrollbar-width: none; }
 @keyframes hole-pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.62; }
+}
+
+/* An abandoned game stays visible and resumable rather than looking finished. */
+.matchup--unfinished {
+  border-style: dashed;
+  border-color: var(--accent);
+}
+
+.matchup--unfinished .matchup__score {
+  opacity: 0.65;
 }

@@ -9,8 +9,9 @@ import {
   type PlayerStats,
 } from "@crokinole/core";
 import { useMemo, useState, type ReactNode } from "react";
+import { Link } from "react-router-dom";
 
-import { useStore, useVisibleGames } from "../../data/store";
+import { useLiveGame, useStore, useVisibleGames } from "../../data/store";
 import { Card, Empty, Money } from "../../ui/components";
 
 interface Row extends PlayerStats {
@@ -32,6 +33,7 @@ interface Row extends PlayerStats {
  */
 export function LeaderboardScreen(): ReactNode {
   const games = useVisibleGames();
+  const live = useLiveGame();
   const { players, presentIds, togglePresent } = useStore();
   const [showAbsent, setShowAbsent] = useState(true);
 
@@ -163,6 +165,28 @@ export function LeaderboardScreen(): ReactNode {
           </>
         ) : null}
       </Card>
+
+      {/*
+        Both actions are always reachable. Starting a new game while one is open
+        simply leaves the old one in progress — that IS "finish later" — and it
+        stays resumable from history. Hiding "new game" behind an open game was
+        a dead end: there was no way out of a game you'd abandoned.
+      */}
+      {isTonight ? (
+        <div className="stack" style={{ gap: "var(--gap-sm)" }}>
+          {live ? (
+            <Link className="btn btn--accent btn--block btn--lg" to={`/games/${live.id}/play`}>
+              Continue game
+            </Link>
+          ) : null}
+          <Link
+            className={live ? "btn btn--block" : "btn btn--accent btn--block btn--lg"}
+            to="/games/new"
+          >
+            New game
+          </Link>
+        </div>
+      ) : null}
     </div>
   );
 }

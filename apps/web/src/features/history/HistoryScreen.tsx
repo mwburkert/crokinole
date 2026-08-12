@@ -7,9 +7,10 @@ import {
   type TeamKey,
 } from "@crokinole/core";
 import { useState, type ReactNode } from "react";
+import { Link } from "react-router-dom";
 
 import { useNights, useStore } from "../../data/store";
-import { Card, Empty, Money } from "../../ui/components";
+import { Badge, Card, Empty, Money } from "../../ui/components";
 
 /**
  * History (§3.5), grouped by night.
@@ -95,8 +96,10 @@ function GameRow({
     </div>
   );
 
+  const unfinished = game.status === "in_progress";
+
   return (
-    <div className="matchup">
+    <div className={`matchup${unfinished ? " matchup--unfinished" : ""}`}>
       <button type="button" className="matchup__main" onClick={onToggle} aria-expanded={open}>
         {side("A", false)}
         <span className="matchup__score">
@@ -115,6 +118,14 @@ function GameRow({
 
       {open ? (
         <div className="matchup__detail">
+          {unfinished ? (
+            <div className="spread" style={{ marginBottom: "0.5rem" }}>
+              <Badge live>Unfinished</Badge>
+              <Link className="btn btn--accent" to={`/games/${game.id}/play`}>
+                Resume
+              </Link>
+            </div>
+          ) : null}
           <div className="spread faint">
             <span>Stakes</span>
             <span>
