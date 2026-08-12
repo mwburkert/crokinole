@@ -34,12 +34,13 @@
  *      `games.createdBy` and `gameEvents.actorPlayerId` in the schema,
  *   4. `npx convex env remove APP_PASSCODE`.
  *
- * What the interim costs, stated plainly: with one shared secret there is no
- * per-person identity, so the audit trail cannot say *who* did something, and
- * every holder of the passphrase is equally trusted. `role` is therefore
- * "admin" for everyone — pretending there are two trust levels behind a single
- * shared secret would be theatre, and it would hide the settings screen from
- * the only people who can reach it.
+ * What the interim costs, stated plainly: a shared secret carries no per-person
+ * identity, so the audit trail still cannot say *who* did something, and two
+ * people holding the same code are indistinguishable. What it *can* say is
+ * which code they produced, and that is a real capability distinction — so
+ * there are two: `ADMIN_PASSCODE` and `APP_PASSCODE`. Anything that needs to
+ * know *who* you are (claiming a player row, "was I in this game?") still has
+ * no answer and must fail closed rather than fall back to the tier.
  * ===========================================================================
  */
 
@@ -102,22 +103,46 @@ function constantTimeEquals(a: string, b: string): boolean {
 /**
  * 🕐 INTERIM. The whole security boundary until Access lands.
  *
- * Fails closed: an unset `APP_PASSCODE` refuses everyone rather than letting
- * everyone through, which is the one mistake in this shape of code that turns a
- * weak gate into no gate at all.
+ * **Two codes, two tiers.** `ADMIN_PASSCODE` authenticates an admin;
+ * `APP_PASSCODE` a player. This is a genuine capability check, not a pretence:
+ * the tier is decided by which secret the caller can actually produce, which is
+ * a real thing to know about them. It is emphatically *not* an identity — it
+ * says what you may do, never who you are, and two people holding the same code
+ * remain indistinguishable. Every guard downstream is written on that basis.
+ *
+ * Fails closed twice over: an unset `APP_PASSCODE` refuses everyone rather than
+ * letting everyone through, and a caller who matches neither secret is refused
+ * before any argument is read. An unset `ADMIN_PASSCODE` simply means there is
+ * no admin tier — it never silently promotes the player code.
+ *
+ * The two codes must differ. If they were ever set to the same value the player
+ * code would silently confer admin, so that is refused outright rather than
+ * resolved in either direction.
  */
-function assertPasscode(passcode: string): void {
-  const expected = (process.env.APP_PASSCODE ?? "").trim();
-  if (expected === "") {
+function tierFor(passcode: string): "admin" | "player" {
+  const appCode = (process.env.APP_PASSCODE ?? "").trim();
+  const adminCode = (process.env.ADMIN_PASSCODE ?? "").trim();
+
+  if (appCode === "") {
     throw authError(
       "NO_PASSCODE_CONFIGURED",
       "This deployment has no APP_PASSCODE set, so nothing can be read or written. " +
         "Run: npx convex env set APP_PASSCODE <value>",
     );
   }
-  if (!constantTimeEquals(passcode.trim(), expected)) {
-    throw authError("BAD_PASSCODE", "That code didn't work.");
+  if (adminCode !== "" && adminCode === appCode) {
+    throw authError(
+      "NO_PASSCODE_CONFIGURED",
+      "ADMIN_PASSCODE and APP_PASSCODE are set to the same value, which would give " +
+        "every player admin. Set them to different values.",
+    );
   }
+
+  const offered = passcode.trim();
+  // Admin first: the codes are distinct, so at most one of these can match.
+  if (adminCode !== "" && constantTimeEquals(offered, adminCode)) return "admin";
+  if (constantTimeEquals(offered, appCode)) return "player";
+  throw authError("BAD_PASSCODE", "That code didn't work.");
 }
 
 /**
@@ -132,15 +157,15 @@ export async function assertAllowlisted(
   passcode: string,
 ): Promise<Caller> {
   // 🕐 INTERIM — delete with the passphrase.
-  assertPasscode(passcode);
+  const tier = tierFor(passcode);
 
   const identity = await ctx.auth.getUserIdentity();
   if (!identity) {
-    // 🕐 INTERIM — under the passphrase there is no identity to resolve. Once
-    // `auth.config.ts` registers the Access provider, this branch becomes
-    // `throw authError("NOT_ALLOWED", "Not signed in.")` and everything below
-    // runs for real.
-    return { email: null, player: null, role: "admin" };
+    // 🕐 INTERIM — under the passphrase there is no identity to resolve, only a
+    // tier. Once `auth.config.ts` registers the Access provider this branch
+    // becomes `throw authError("NOT_ALLOWED", "Not signed in.")` and everything
+    // below runs for real, with `role` coming from the allowlist instead.
+    return { email: null, player: null, role: tier };
   }
 
   const email = identity.email?.toLowerCase();

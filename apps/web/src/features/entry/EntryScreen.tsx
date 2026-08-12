@@ -9,6 +9,7 @@ import {
   snapIntoRegion,
   scoreRound,
   settle,
+  type DiscColor,
   type PlacedDisc,
   type RingCounts,
   type TeamKey,
@@ -67,8 +68,6 @@ export function EntryScreen(): ReactNode {
   const [seededCorrection, setSeededCorrection] = useState(!correcting);
   /** Shown for a beat after each round so you see the match take shape. */
   const [showCard, setShowCard] = useState(false);
-  /** Per-player twenties for the round in play. */
-  const [liveTwenties, setLiveTwenties] = useState<EnteredTwenties>({});
   /** Per-player twenties for the committed round being corrected. */
   const [editTwenties, setEditTwenties] = useState<EnteredTwenties>({});
   /** Which round `editTwenties` was seeded from — see the re-seed below. */
@@ -176,6 +175,9 @@ export function EntryScreen(): ReactNode {
   const nameOf = (id: string): string =>
     players.find((player) => player.id === id)?.displayName ?? "?";
   const sideName = (team: TeamKey): string => game.teams[team].playerIds.map(nameOf).join(" & ");
+  /** Who is on a side, in seat order, for the pinned score card. */
+  const rosterOf = (team: TeamKey): Seat[] =>
+    game.teams[team].playerIds.map((id) => ({ id, name: nameOf(id) }));
 
   const left = remaining(discs, budget);
   const complete = manualCounts !== null || totals !== null || placementComplete(discs, budget);
@@ -214,17 +216,9 @@ export function EntryScreen(): ReactNode {
     setManualCounts(null);
     setTotals(null);
     setConfirming(false);
-    setLiveTwenties({});
   };
 
-  /** Record one player's twenties for the round in play. */
-  const bumpLive = (team: TeamKey, playerId: string, next: number): void => {
-    setLiveTwenties((current) =>
-      recordTwenties(current, game.teams[team].playerIds, playerId, next),
-    );
-  };
-
-  /** The same, for a committed round being corrected. */
+  /** Record one player's twenties on the committed round being corrected. */
   const bumpEdit = (team: TeamKey, playerId: string, next: number): void => {
     setEditTwenties((current) =>
       recordTwenties(current, game.teams[team].playerIds, playerId, next),
@@ -234,13 +228,13 @@ export function EntryScreen(): ReactNode {
 
   const write = (): void => {
     if (!gameId) return;
-    // Raw inputs only: the ring counts, the positions they came from, and who
-    // sank the twenties. Nothing derived — the mutation works out the points,
-    // the match score and whether the game is over (§3.2.1).
-    const playerStats = toPlayerStats(liveTwenties, game.teams, { A: a, B: b });
+    // Raw inputs only: the ring counts and the positions they came from.
+    // Nothing derived — the mutation works out the points, the match score and
+    // whether the game is over (§3.2.1). Per-player twenties are deliberately
+    // not collected here (see the score card below); they are attributed from
+    // the scoreboard sheet afterwards, and `updateRound` carries them.
     addRound(gameId, a, b, {
       ...(boardIsSource ? { discs } : {}),
-      ...(playerStats ? { playerStats } : {}),
       // A typed total has to travel or the round lands as 0–0 — a tie, silently.
       // The counts alongside it are zeros by construction: `setTotals` clears
       // both the board and the manual counts, because a total is what you log
@@ -527,9 +521,7 @@ export function EntryScreen(): ReactNode {
       </div>
 
       <div className="scoreline">
-        <div className={`scoreline__side scoreline__side--${colorA}`}>
-          <span className="scoreline__mp num">{pending.aPoints}</span>
-        </div>
+        <ScoreSide points={pending.aPoints} color={colorA} roster={rosterOf("A")} />
         <div className="scoreline__label">
           round {game.rounds.length + 1}
           <button
@@ -546,9 +538,7 @@ export function EntryScreen(): ReactNode {
             </svg>
           </button>
         </div>
-        <div className={`scoreline__side scoreline__side--right scoreline__side--${colorB}`}>
-          <span className="scoreline__mp num">{pending.bPoints}</span>
-        </div>
+        <ScoreSide points={pending.bPoints} color={colorB} roster={rosterOf("B")} edge="right" />
       </div>
 
 
@@ -591,19 +581,15 @@ export function EntryScreen(): ReactNode {
         </div>
       ) : null}
 
-      {/* Twenties (§3.5 step 4). Renders nothing at all unless a side actually
-          sank one, and one collapsed row when it did — the fast path is board →
-          Finish round and this must not get in front of it. */}
-      <TwentiesRows
-        teams={game.teams}
-        config={cfg}
-        counts={{ A: a, B: b }}
-        roundIndex={game.rounds.length}
-        entered={liveTwenties}
-        onChange={bumpLive}
-        nameOf={nameOf}
-      />
-
+      {/*
+       * Twenties (§3.5 step 4) used to sit here, as a collapsed row per team.
+       * It is gone from the live board on purpose: the fast path is board →
+       * *Finish round*, and a row that appeared under the board the moment
+       * anyone sank a twenty put a control in front of the only button this
+       * screen exists to press. Attribution is not lost — it moved to the
+       * scoreboard sheet, where a committed round can be opened and each
+       * player's twenties stepped in, and `updateRound` writes them.
+       */}
       {(
         <button
           type="button"
@@ -640,6 +626,63 @@ export function EntryScreen(): ReactNode {
           Finish later
         </button>
       </div>
+    </div>
+  );
+}
+
+/** One seat on a side: the id keys the list, the nickname is what's shown. */
+interface Seat {
+  id: string;
+  name: string;
+}
+
+/**
+ * One side of the pinned score card: that side's round score, with its players'
+ * nicknames stacked beside it.
+ *
+ * Which side of the number the names sit on follows the **discs, not the seat**
+ * — black's names read out to the right of its score, white's mirror to the
+ * left — so a colour's names always lean the same way whichever end of the
+ * board that colour drew. Flipping colours on a game therefore flips the whole
+ * card without a second layout, and nothing here assumes team A is black.
+ *
+ * The names are the only thing on this line allowed to shrink. The round scores
+ * are the largest type on screen because they are what players call out
+ * mid-round (§3.5), so they keep their size and the names ellipsise instead —
+ * `MAX_NAME_LENGTH` means that should never bite, but two long nicknames a side
+ * on a 393px phone is exactly the case that has to hold.
+ */
+function ScoreSide({
+  points,
+  color,
+  roster,
+  edge,
+}: {
+  points: number;
+  color: DiscColor;
+  roster: Seat[];
+  /** The right-hand side packs its content against the outer edge. */
+  edge?: "right";
+}): ReactNode {
+  const names = (
+    <span className={`scoreline__names scoreline__names--${color}`}>
+      {roster.map((seat) => (
+        <span className="scoreline__name" key={seat.id}>
+          {seat.name}
+        </span>
+      ))}
+    </span>
+  );
+
+  return (
+    <div
+      className={`scoreline__side scoreline__side--${color}${
+        edge === "right" ? " scoreline__side--right" : ""
+      }`}
+    >
+      {color === "white" ? names : null}
+      <span className="scoreline__mp num">{points}</span>
+      {color === "black" ? names : null}
     </div>
   );
 }

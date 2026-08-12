@@ -30,16 +30,18 @@ import { configFor, type Bet, type GameWithRounds, type Round, type RoundResult 
 
 export interface SeedPlayer {
   slug: string;
-  displayName: string;
-  shortName: string;
+  firstName: string;
+  lastName?: string;
+  /** What every screen shows. Two Matts, so those two go by surname. */
+  nickname: string;
 }
 
 export const FIRST_NIGHT_PLAYERS: SeedPlayer[] = [
-  { slug: "kinsey", displayName: "Kinsey", shortName: "Kinsey" },
-  { slug: "marley", displayName: "Marley", shortName: "Marley" },
-  { slug: "spencer", displayName: "Spencer", shortName: "Spencer" },
-  { slug: "burkert", displayName: "Burkert", shortName: "Burkert" },
-  { slug: "burton", displayName: "Burton", shortName: "Burton" },
+  { slug: "kinsey", firstName: "Kinsey", lastName: "Mead", nickname: "Kinsey" },
+  { slug: "marley", firstName: "Marley", nickname: "Marley" },
+  { slug: "spencer", firstName: "Spencer", lastName: "Herrick", nickname: "Spencer" },
+  { slug: "burkert", firstName: "Matt", lastName: "Burkert", nickname: "Burkert" },
+  { slug: "burton", firstName: "Matt", lastName: "Burton", nickname: "Burton" },
 ];
 
 /**

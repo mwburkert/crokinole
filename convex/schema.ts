@@ -28,9 +28,24 @@ export default defineSchema({
    * scores for everyone at first (§3.6).
    */
   players: defineTable({
-    displayName: v.string(),
-    /** Short form for tight mobile tables. */
-    shortName: v.optional(v.string()),
+    /** A person's real name, split so they can be found and told apart. */
+    firstName: v.string(),
+    lastName: v.optional(v.string()),
+    /**
+     * What the app actually shows — standings, seat pickers, history, the score
+     * card. Capped at `MAX_NAME_LENGTH` because every surface that lists names
+     * is width-constrained on a phone.
+     *
+     * Defaults to the first name, or first name plus last initial when that
+     * collides (`defaultNickname` in core), and is editable afterwards. It is
+     * the field the old `displayName` became; `seed:migrateNames` did the move.
+     */
+    nickname: v.string(),
+    /**
+     * Optional when an admin adds someone — you can log a game for a person who
+     * has never opened the app (§3.6). **Required** in the self-join flow,
+     * where it is the key that stops one person becoming two rows.
+     */
     email: v.optional(v.string()),
     /**
      * The `sub` claim from the Cloudflare Access JWT.

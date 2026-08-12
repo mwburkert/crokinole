@@ -12,9 +12,17 @@
 
 export interface Player {
   id: string;
+  /**
+   * The **nickname** — what every screen shows.
+   *
+   * Named `displayName` here rather than `nickname` because that is what it is
+   * to a screen: the one string you render. The split-out `firstName` /
+   * `lastName` below identify the person and are only needed where someone is
+   * being added or edited.
+   */
   displayName: string;
-  /** Falls back to `displayName` at the seam — the tight tables need one. */
-  shortName: string;
+  firstName: string;
+  lastName: string | null;
   isActive: boolean;
 }
 
@@ -34,7 +42,10 @@ export type Role = "admin" | "player";
 export interface Member {
   /** Null only for an allowlist entry with no player row behind it. */
   playerId: string | null;
+  /** The nickname. */
   displayName: string | null;
+  firstName: string | null;
+  lastName: string | null;
   email: string | null;
   role: Role | null;
   invitedAt: number;

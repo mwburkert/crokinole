@@ -22,11 +22,12 @@
 
 import { v } from "convex/values";
 
-import { MAX_NAME_LENGTH } from "@crokinole/core";
+import { MAX_NAME_LENGTH, normaliseName } from "@crokinole/core";
 
 import type { MutationCtx } from "./_generated/server";
 import { mutation, query } from "./_generated/server";
 import { assertAdmin, assertAllowlisted } from "./lib/auth";
+import { nicknameOf, resolveNickname } from "./lib/players";
 
 const roleValidator = v.union(v.literal("admin"), v.literal("player"));
 
@@ -117,7 +118,10 @@ export const listMembers = query({
       if (entry) claimed.add(entry.email);
       return {
         playerId: player._id as string | null,
-        displayName: player.displayName as string | null,
+        /** The nickname — what every screen shows. */
+        displayName: nicknameOf(player) as string | null,
+        firstName: (player.firstName ?? null) as string | null,
+        lastName: (player.lastName ?? null) as string | null,
         email: player.email ?? null,
         role: entry?.role ?? null,
         invitedAt: entry?.invitedAt ?? player.createdAt,
@@ -136,6 +140,8 @@ export const listMembers = query({
       rows.push({
         playerId: null,
         displayName: null,
+        firstName: null,
+        lastName: null,
         email: entry.email,
         role: entry.role,
         invitedAt: entry.invitedAt,
@@ -160,16 +166,19 @@ export const invite = mutation({
   args: {
     passcode: v.string(),
     email: v.string(),
-    displayName: v.string(),
+    firstName: v.string(),
+    lastName: v.optional(v.string()),
+    nickname: v.optional(v.string()),
     role: v.optional(roleValidator),
   },
   handler: async (ctx, args) => {
     await assertAdmin(ctx, args.passcode);
 
     const email = normalise(args.email);
-    const displayName = args.displayName.trim();
+    const firstName = normaliseName(args.firstName);
+    const lastName = normaliseName(args.lastName ?? "") || undefined;
     if (!email.includes("@")) throw new Error("That doesn't look like an email address.");
-    if (!displayName) throw new Error("Give them a name so they can be picked for a game.");
+    if (!firstName) throw new Error("Give them a name so they can be picked for a game.");
 
     const existing = await ctx.db
       .query("allowlist")
@@ -195,8 +204,11 @@ export const invite = mutation({
       return player._id;
     }
 
+    const existingPlayers = await ctx.db.query("players").collect();
     return await ctx.db.insert("players", {
-      displayName,
+      firstName,
+      ...(lastName ? { lastName } : {}),
+      nickname: resolveNickname(args.nickname, firstName, lastName, existingPlayers),
       email,
       isActive: true,
       createdAt: Date.now(),
@@ -214,6 +226,7 @@ export const updateProfile = mutation({
   args: {
     passcode: v.string(),
     playerId: v.id("players"),
+    /** The nickname — what every screen shows. */
     displayName: v.optional(v.string()),
     email: v.optional(v.string()),
   },
@@ -230,15 +243,15 @@ export const updateProfile = mutation({
     }
     if (player.email) assertMayEdit(caller.email, player.email);
 
-    const patch: { displayName?: string; email?: string } = {};
+    const patch: { nickname?: string; email?: string } = {};
 
     if (args.displayName !== undefined) {
-      const displayName = args.displayName.trim();
-      if (!displayName) throw new Error("A player needs a name.");
-      if (displayName.length > MAX_NAME_LENGTH) {
-        throw new Error(`Names are capped at ${MAX_NAME_LENGTH} characters.`);
+      const nickname = normaliseName(args.displayName);
+      if (!nickname) throw new Error("A player needs a nickname — it's what everyone sees.");
+      if (nickname.length > MAX_NAME_LENGTH) {
+        throw new Error(`Nicknames are capped at ${MAX_NAME_LENGTH} characters.`);
       }
-      patch.displayName = displayName;
+      patch.nickname = nickname;
     }
 
     if (args.email !== undefined) {

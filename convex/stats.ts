@@ -15,6 +15,7 @@ import { v } from "convex/values";
 import { query } from "./_generated/server";
 import { assertAllowlisted } from "./lib/auth";
 import { loadAllGames } from "./lib/model";
+import { nicknameOf } from "./lib/players";
 
 /** The one leaderboard. Records, scoring stats, and money — all authenticated. */
 export const leaderboard = query({
@@ -38,8 +39,11 @@ export const leaderboard = query({
     const names = new Map(players.map((p) => [p._id as string, p]));
     return rows.map((row) => ({
       ...row,
-      displayName: names.get(row.playerId)?.displayName ?? "Unknown",
-      shortName: names.get(row.playerId)?.shortName ?? null,
+      // The nickname is what every surface shows; `displayName` is retired.
+      displayName: (() => {
+        const player = names.get(row.playerId);
+        return player ? nicknameOf(player) : "Unknown";
+      })(),
     }));
   },
 });

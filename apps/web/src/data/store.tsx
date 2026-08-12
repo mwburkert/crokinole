@@ -136,7 +136,25 @@ interface StoreValue {
    * identity provider there is nothing to invite them *to*, so a name alone
    * creates the player row that lets them be picked for a game (§3.6).
    */
-  addPlayer: (input: { displayName: string; email?: string; role?: Role }) => void;
+  addPlayer: (input: {
+    firstName: string;
+    lastName?: string;
+    /** Omitted means "pick one for me" — first name, or first + last initial. */
+    nickname?: string;
+    /** Optional on this path; an admin can add someone with no email (§3.6). */
+    email?: string;
+    role?: Role;
+  }) => void;
+  /**
+   * Add yourself. Email is **required** here and is what stops a returning
+   * player becoming a second row — deliberately unlike `addPlayer`.
+   */
+  selfJoin: (input: {
+    email: string;
+    firstName: string;
+    lastName?: string;
+    nickname?: string;
+  }) => Promise<{ created: boolean }>;
   setRole: (email: string, role: Role) => void;
   revoke: (email: string) => void;
   updateProfile: (
@@ -225,6 +243,7 @@ export function StoreProvider({ children }: { children: ReactNode }): ReactNode 
   const softDeleteMutation = useMutation(api.games.softDelete);
   const inviteMutation = useMutation(api.admin.invite);
   const createPlayerMutation = useMutation(api.players.create);
+  const selfJoinMutation = useMutation(api.players.selfJoin);
   const setRoleMutation = useMutation(api.admin.setRole);
   const revokeMutation = useMutation(api.admin.revoke);
   const updateProfileMutation = useMutation(api.admin.updateProfile);
@@ -254,9 +273,10 @@ export function StoreProvider({ children }: { children: ReactNode }): ReactNode 
     () =>
       (playerDocs ?? []).map((doc) => ({
         id: doc._id,
-        displayName: doc.displayName,
-        // Stored short names are optional; the tables that use them are not.
-        shortName: doc.shortName ?? doc.displayName,
+        // The nickname is the display name — see `Player` in ./types.
+        displayName: doc.nickname,
+        firstName: doc.firstName,
+        lastName: doc.lastName ?? null,
         isActive: doc.isActive,
       })),
     [playerDocs],
@@ -277,6 +297,8 @@ export function StoreProvider({ children }: { children: ReactNode }): ReactNode 
       return memberRows.map((row) => ({
         playerId: row.playerId,
         displayName: row.displayName,
+        firstName: row.firstName,
+        lastName: row.lastName,
         email: row.email,
         role: row.role,
         invitedAt: row.invitedAt,
@@ -288,7 +310,9 @@ export function StoreProvider({ children }: { children: ReactNode }): ReactNode 
     return [
       {
         playerId: me.player._id,
-        displayName: me.player.displayName,
+        displayName: me.player.nickname,
+        firstName: me.player.firstName,
+        lastName: me.player.lastName ?? null,
         email: me.email,
         role: me.role,
         invitedAt: me.player.createdAt,
@@ -350,13 +374,23 @@ export function StoreProvider({ children }: { children: ReactNode }): ReactNode 
   );
 
   const addPlayer = useCallback(
-    ({ displayName, email, role }: { displayName: string; email?: string; role?: Role }): void => {
-      // Truncate rather than let the server throw: the name field is a text
-      // input and over-typing it shouldn't lose the entry.
-      const name = displayName.trim().slice(0, MAX_NAME_LENGTH);
-      if (!name) return;
-
+    ({
+      firstName,
+      lastName,
+      nickname,
+      email,
+      role,
+    }: {
+      firstName: string;
+      lastName?: string;
+      nickname?: string;
+      email?: string;
+      role?: Role;
+    }): void => {
+      const first = firstName.trim();
+      if (!first) return;
       const normalised = email?.trim().toLowerCase();
+
       if (normalised) {
         // With an address they go on the allowlist too, which is what makes the
         // row mean something once a login exists.
@@ -365,16 +399,52 @@ export function StoreProvider({ children }: { children: ReactNode }): ReactNode 
           inviteMutation({
             passcode,
             email: normalised,
-            displayName: name,
+            firstName: first,
+            ...(lastName?.trim() ? { lastName: lastName.trim() } : {}),
+            ...(nickname?.trim() ? { nickname: nickname.trim() } : {}),
             ...(role ? { role } : {}),
           }),
         );
         return;
       }
       // 🕐 The common case today: a name and nothing else.
-      fire(createPlayerMutation({ passcode, displayName: name }));
+      fire(
+        createPlayerMutation({
+          passcode,
+          firstName: first,
+          ...(lastName?.trim() ? { lastName: lastName.trim() } : {}),
+          ...(nickname?.trim() ? { nickname: nickname.trim() } : {}),
+        }),
+      );
     },
     [createPlayerMutation, inviteMutation, passcode],
+  );
+
+  /**
+   * Add yourself.
+   *
+   * Awaited rather than fire-and-forget, unlike every other write here: the
+   * join screen has to tell you whether it worked before it can move you on,
+   * and a silent failure would leave someone standing at a table believing they
+   * are in the game.
+   */
+  const selfJoin = useCallback(
+    async (input: {
+      email: string;
+      firstName: string;
+      lastName?: string;
+      nickname?: string;
+    }): Promise<{ created: boolean }> => {
+      const result = await selfJoinMutation({
+        passcode,
+        email: input.email.trim().toLowerCase(),
+        firstName: input.firstName.trim(),
+        ...(input.lastName?.trim() ? { lastName: input.lastName.trim() } : {}),
+        ...(input.nickname?.trim() ? { nickname: input.nickname.trim() } : {}),
+      });
+      return { created: result.created };
+    },
+    [passcode, selfJoinMutation],
   );
 
   const setRole = useCallback(
@@ -630,6 +700,7 @@ export function StoreProvider({ children }: { children: ReactNode }): ReactNode 
       isAdmin,
       isSuperAdmin,
       addPlayer,
+      selfJoin,
       setRole,
       revoke,
       updateProfile,
@@ -653,6 +724,7 @@ export function StoreProvider({ children }: { children: ReactNode }): ReactNode 
       isAdmin,
       isSuperAdmin,
       addPlayer,
+      selfJoin,
       setRole,
       revoke,
       updateProfile,

@@ -13,6 +13,7 @@ import type * as games from "../games.js";
 import type * as lib_auth from "../lib/auth.js";
 import type * as lib_firstNight from "../lib/firstNight.js";
 import type * as lib_model from "../lib/model.js";
+import type * as lib_players from "../lib/players.js";
 import type * as players from "../players.js";
 import type * as seed from "../seed.js";
 import type * as stats from "../stats.js";
@@ -29,6 +30,7 @@ declare const fullApi: ApiFromModules<{
   "lib/auth": typeof lib_auth;
   "lib/firstNight": typeof lib_firstNight;
   "lib/model": typeof lib_model;
+  "lib/players": typeof lib_players;
   players: typeof players;
   seed: typeof seed;
   stats: typeof stats;

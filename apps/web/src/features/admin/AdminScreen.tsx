@@ -374,7 +374,9 @@ function AddSheet({ onClose }: { onClose: () => void }): ReactNode {
             // The role only means something alongside an address — it is the
             // allowlist entry's column, and no address means no entry.
             addPlayer({
-              displayName: trimmedName,
+              // Temporary shim: this sheet still collects one name. The
+              // first/last/nickname form replaces it — see the join flow.
+              firstName: trimmedName,
               ...(hasEmail ? { email: trimmedEmail, role } : {}),
             });
             onClose();

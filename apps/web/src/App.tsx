@@ -118,8 +118,23 @@ function BoardGlyph({ mark }: { mark?: "resume" | "new" }): ReactNode {
         className="boardbtn__ring"
       />
       <circle cx="24" cy="24" r="2.6" className="boardbtn__hole" />
-      {mark === "resume" ? <path d="M17 12 L37 24 L17 36 Z" className="boardbtn__mark" /> : null}
-      {mark === "new" ? <path d="M24 9 V39 M9 24 H39" className="boardbtn__plus" /> : null}
+      {/*
+       * Two states of one control, so they are drawn as one glyph in two
+       * shapes: same stroke weight, same rounded joins, matched optical mass.
+       * Both are stroked — the triangle is filled *and* stroked — which is what
+       * gives the play mark the same corner radius as the plus's caps, and what
+       * makes the pair read as siblings rather than two borrowed icons. Sizes
+       * are the inner paths; the stroke grows each by half its width.
+       */}
+      {mark === "resume" ? (
+        <path
+          d="M17.5 13.8 L35 24 L17.5 34.2 Z"
+          className="boardbtn__glyph boardbtn__glyph--play"
+        />
+      ) : null}
+      {mark === "new" ? (
+        <path d="M24 11.5 V36.5 M11.5 24 H36.5" className="boardbtn__glyph boardbtn__glyph--plus" />
+      ) : null}
     </svg>
   );
 }
