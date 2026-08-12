@@ -1625,3 +1625,96 @@ html { scrollbar-width: none; }
 .row--tools {
   margin-bottom: 0.25rem;
 }
+
+/* ── Passcode gate and crash screen ──────────────────────────────────────── */
+
+/*
+ * ⚠️ The gate is TEMPORARY (§7.1) — it goes when Cloudflare Access lands and
+ * asks for the identity itself. `.gate__detail` and the crash screen it dresses
+ * should stay: a rejected Convex query throws during render, and something has
+ * to be on screen when it does.
+ *
+ * No tab bar and no `.app__main` here, so this owns the whole viewport. Sized
+ * for a phone held one-handed: everything sits in the upper two thirds of a
+ * 393×852 screen, above where a keyboard would come up.
+ */
+.gate {
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: calc(env(safe-area-inset-top) + var(--gap-lg)) var(--gap)
+    calc(env(safe-area-inset-bottom) + var(--gap-lg));
+}
+
+.gate__inner {
+  width: 100%;
+  max-width: 22rem;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+  text-align: center;
+}
+
+.gate__board {
+  display: block;
+  width: 6.5rem;
+  height: 6.5rem;
+  margin: 0 auto;
+}
+
+.gate__title {
+  margin: 0;
+  font-size: 1.6rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+.gate__form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-sm);
+}
+
+.gate__label {
+  text-align: left;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+/* Overrides `.field`'s body size — a code is read back character by character. */
+.gate__input {
+  text-align: center;
+  font-size: 1.15rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+
+.gate__error {
+  margin: 0;
+  text-align: left;
+}
+
+.gate__hint {
+  margin: 0;
+}
+
+/* The raw error, kept legible but visibly not part of the app's own voice. */
+.gate__detail {
+  margin: 0;
+  max-height: 40vh;
+  overflow-y: auto;
+  padding: var(--gap-sm) var(--gap);
+  background: var(--bg-sunken);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  color: var(--ink-soft);
+  font-family: var(--font-num);
+  font-size: 0.8rem;
+  text-align: left;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

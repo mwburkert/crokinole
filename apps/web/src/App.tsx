@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { NavLink, Route, Routes } from "react-router-dom";
 
-import { StoreProvider, useLiveGame } from "./data/store";
+import { StoreProvider, useLiveGame, useStore } from "./data/store";
 import { AdminScreen } from "./features/admin/AdminScreen";
 import { EntryScreen } from "./features/entry/EntryScreen";
 import { NewGameScreen } from "./features/entry/NewGameScreen";
@@ -17,6 +17,7 @@ import { StatsScreen } from "./features/stats/StatsScreen";
  * AUD on every call.
  */
 function TabBar(): ReactNode {
+  const { isLoading } = useStore();
   const live = useLiveGame();
   return (
     <nav className="tabbar" aria-label="Main">
@@ -40,32 +41,48 @@ function TabBar(): ReactNode {
       {/* The primary action, shaped like the thing it starts. Rides above the
           bar with a collar of the bar's own colour, which is what cuts the top
           line and reads as a bulge. */}
-      <NavLink
-        to={live ? `/games/${live.id}/play` : "/games/new"}
-        className="tabbar__link tabbar__link--board"
-        aria-label={live ? "Resume game" : "New game"}
-      >
-        <span className="boardbtn" aria-hidden="true">
-          <svg viewBox="0 0 48 48">
-            <circle cx="24" cy="24" r="23" className="boardbtn__frame" />
-            <circle cx="24" cy="24" r="20" className="boardbtn__surface" />
-            <circle cx="24" cy="24" r="13.5" className="boardbtn__ring" />
-            <circle cx="24" cy="24" r="7" className="boardbtn__ring" />
-            {/* Quadrant dividers, as on the real board's outer ring. */}
-            <path
-              d="M33.5 14.5 L38.6 9.4 M14.5 14.5 L9.4 9.4 M33.5 33.5 L38.6 38.6 M14.5 33.5 L9.4 38.6"
-              className="boardbtn__ring"
-            />
-            <circle cx="24" cy="24" r="2.6" className="boardbtn__hole" />
-            {live ? (
-              <path d="M17 12 L37 24 L17 36 Z" className="boardbtn__mark" />
-            ) : (
-              <path d="M24 9 V39 M9 24 H39" className="boardbtn__plus" />
-            )}
-          </svg>
-        </span>
-        {live ? "Resume" : "New"}
-      </NavLink>
+      {isLoading ? (
+        /*
+         * Whether this is "Resume" or "New" is a fact about the database, and
+         * for the first frames we don't have it: `live` is undefined because
+         * the games haven't arrived, which looks exactly like there being no
+         * game in progress. Left alone, the button says New and points at
+         * /games/new — so a mid-game refresh followed by a tap on the biggest
+         * target on screen starts a *second* game against the same four people,
+         * and the real one is stranded in history.
+         *
+         * The other two options were worse. Guessing "Resume" needs an id we
+         * don't have. Keeping the link live and correcting the label a moment
+         * later means the tap that lands in that moment still navigates
+         * wrongly, which is the case we're here to fix. So: hold the shape,
+         * hold the space, take no tap, claim nothing. It costs a beat of
+         * unavailability on a cold load and nothing at all afterwards —
+         * `isLoading` never goes true again for reactive updates.
+         */
+        <button
+          type="button"
+          className="tabbar__link tabbar__link--board tabbar__link--waiting"
+          disabled
+          aria-busy="true"
+        >
+          <span className="boardbtn" aria-hidden="true">
+            {/* No mark and no plus: both are the claim we can't make yet. */}
+            <BoardGlyph />
+          </span>
+          Board
+        </button>
+      ) : (
+        <NavLink
+          to={live ? `/games/${live.id}/play` : "/games/new"}
+          className="tabbar__link tabbar__link--board"
+          aria-label={live ? "Resume game" : "New game"}
+        >
+          <span className="boardbtn" aria-hidden="true">
+            <BoardGlyph mark={live ? "resume" : "new"} />
+          </span>
+          {live ? "Resume" : "New"}
+        </NavLink>
+      )}
       <NavLink to="/stats" className="tabbar__link">
         <span className="tabbar__glyph" aria-hidden="true">
           ▦
@@ -80,6 +97,30 @@ function TabBar(): ReactNode {
         Settings
       </NavLink>
     </nav>
+  );
+}
+
+/**
+ * The board, drawn small. `mark` is the overlay that says what tapping it does
+ * — a play triangle to resume, a plus to start — and is left off entirely while
+ * the store hasn't said which it is.
+ */
+function BoardGlyph({ mark }: { mark?: "resume" | "new" }): ReactNode {
+  return (
+    <svg viewBox="0 0 48 48">
+      <circle cx="24" cy="24" r="23" className="boardbtn__frame" />
+      <circle cx="24" cy="24" r="20" className="boardbtn__surface" />
+      <circle cx="24" cy="24" r="13.5" className="boardbtn__ring" />
+      <circle cx="24" cy="24" r="7" className="boardbtn__ring" />
+      {/* Quadrant dividers, as on the real board's outer ring. */}
+      <path
+        d="M33.5 14.5 L38.6 9.4 M14.5 14.5 L9.4 9.4 M33.5 33.5 L38.6 38.6 M14.5 33.5 L9.4 38.6"
+        className="boardbtn__ring"
+      />
+      <circle cx="24" cy="24" r="2.6" className="boardbtn__hole" />
+      {mark === "resume" ? <path d="M17 12 L37 24 L17 36 Z" className="boardbtn__mark" /> : null}
+      {mark === "new" ? <path d="M24 9 V39 M9 24 H39" className="boardbtn__plus" /> : null}
+    </svg>
   );
 }
 

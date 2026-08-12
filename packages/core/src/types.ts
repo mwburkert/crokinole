@@ -102,6 +102,31 @@ export interface Bet {
   amountCents: number;
 }
 
+/**
+ * Where a disc came to rest. `ditch` scores nothing but is a real placement —
+ * which is what makes "all 24 discs accounted for" a satisfiable condition
+ * rather than a nag (§3.5).
+ *
+ * Declared here rather than in `discs.ts` so `Round` can carry positions
+ * without the two modules importing each other.
+ */
+export type Region = "twenty" | "fifteen" | "ten" | "five" | "ditch";
+
+/**
+ * One disc, where it came to rest.
+ *
+ * Coordinates are in the board's own 0–200 space with the centre at (100, 100),
+ * independent of how large the board is drawn.
+ */
+export interface PlacedDisc {
+  id: string;
+  color: DiscColor;
+  /** 0–200 board space. */
+  x: number;
+  y: number;
+  region: Region;
+}
+
 /** Optional per-player detail for a round. Only `twenties` is entered in Phase 1. */
 export interface RoundPlayerStat {
   playerId: PlayerId;
@@ -147,6 +172,18 @@ export interface Round extends RoundInput {
   /** 0-based position within the game. */
   index: number;
   playerStats?: RoundPlayerStat[];
+  /**
+   * Where each disc came to rest (§3.5).
+   *
+   * ⚠️ The one stored value in this app that isn't a raw input and isn't
+   * derived — position cannot be recovered from ring counts. Accepted
+   * deliberately, so a board can be replayed later. It creates two sources for
+   * one number, so the rule is explicit and enforced at every write: **when
+   * `discs` is present it is the source of truth, and `A`/`B` are recomputed
+   * from it by `countsFromDiscs`.** They can never disagree. A round typed into
+   * the manual menu simply has no `discs`, and its counts stand alone.
+   */
+  discs?: PlacedDisc[];
 }
 
 /** A game as stored — rounds live in their own table (§3.3). */

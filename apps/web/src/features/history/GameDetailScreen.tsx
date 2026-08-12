@@ -3,17 +3,29 @@ import { useState, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
 import { useStore } from "../../data/store";
-import { Badge, Card, Money } from "../../ui/components";
+import { Badge, Card, Loading, Money } from "../../ui/components";
 
 /** Game detail, round by round, plus soft delete (§3.5). */
 export function GameDetailScreen(): ReactNode {
   const { gameId } = useParams();
   const navigate = useNavigate();
-  const { getGame, softDelete, players } = useStore();
+  const { getGame, softDelete, players, isLoading } = useStore();
   const [confirming, setConfirming] = useState(false);
 
   const game = gameId ? getGame(gameId) : undefined;
-  if (!game) return <p className="empty">That game is gone.</p>;
+  // "Not in the list yet" and "not in the list at all" are the same `undefined`,
+  // so this has to wait before it accuses anyone of losing a game. Told the
+  // wrong way round it reads as data loss on a mid-game refresh, which is the
+  // one thing this screen must never do.
+  if (!game) {
+    return isLoading ? (
+      <Card>
+        <Loading rows={3} />
+      </Card>
+    ) : (
+      <p className="empty">That game is gone.</p>
+    );
+  }
 
   const standing = gameStanding(game.rounds, game.config);
   const result = settle(game);

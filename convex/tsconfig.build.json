@@ -1,0 +1,31 @@
+{
+  /*
+   * The repo's view of `convex/`, as opposed to Convex's own.
+   *
+   * `convex/tsconfig.json` is written and owned by the Convex CLI: it describes
+   * the runtime the functions execute in, and the CLI runs `tsc --noEmit`
+   * against it on every push. This file exists alongside it because the root
+   * `tsc -b` needs something different — a *composite* project that emits
+   * declarations, so `apps/web` can import `convex/_generated/api` and have
+   * TypeScript redirect the modules behind it to built declarations instead of
+   * dragging every Convex source into the web app's program (which is what
+   * scattered stray `.d.ts` files next to the sources).
+   *
+   * Keep the two in step: this one inherits the repo's strictness from
+   * `tsconfig.base.json`, so it is the stricter of the pair.
+   */
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "outDir": "./dist-types",
+    "noEmit": false,
+    "emitDeclarationOnly": true,
+    /* Convex functions run on a V8 isolate with the web platform APIs. */
+    "lib": ["ES2023", "DOM"],
+    /* `process.env` — APP_PASSCODE, SUPER_ADMIN_EMAIL, the Access config. */
+    "types": ["node"]
+  },
+  "include": ["**/*.ts"],
+  "exclude": ["_generated", "dist-types"],
+  "references": [{ "path": "../packages/core" }]
+}

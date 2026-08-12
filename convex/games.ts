@@ -4,18 +4,30 @@
  * Every handler starts with `assertAllowlisted` — Convex is a public internet
  * endpoint and Cloudflare Access does not protect it (§3.2.5). Nothing derived
  * is ever written: no scores, no totals, no standings.
+ *
+ * 🕐 Every public function takes `passcode` while the shared passphrase is the
+ * auth model. It goes when Cloudflare Access lands — see `convex/lib/auth.ts`,
+ * where the whole interim is described and marked for deletion.
  */
 
 import {
+  countsFromDiscs,
   DEFAULT_SCORING,
+  discsPerTeam,
   errorsOnly,
   gameStanding,
+  placedCount,
   scoreRoundInput,
   settle,
   validateGame,
+  type DiscColor,
+  type PlacedDisc,
+  type RingCounts,
+  type ScoringConfig,
 } from "@crokinole/core";
 import { v } from "convex/values";
 
+import type { Doc } from "./_generated/dataModel";
 import { mutation, query } from "./_generated/server";
 import { assertAdmin, assertAllowlisted } from "./lib/auth";
 import { loadAllGames, loadGame, recordEvent, toCoreGame } from "./lib/model";
@@ -29,6 +41,39 @@ const ringCounts = v.object({
 
 const teamColor = v.union(v.literal("black"), v.literal("white"));
 
+/** Mirrors `rounds.discs` in the schema and core's `PlacedDisc`. */
+const placedDiscs = v.array(
+  v.object({
+    id: v.string(),
+    color: teamColor,
+    x: v.number(),
+    y: v.number(),
+    region: v.union(
+      v.literal("twenty"),
+      v.literal("fifteen"),
+      v.literal("ten"),
+      v.literal("five"),
+      v.literal("ditch"),
+    ),
+  }),
+);
+
+const pointsOverride = v.optional(
+  v.object({ A: v.optional(v.number()), B: v.optional(v.number()) }),
+);
+
+const playerStats = v.optional(
+  v.array(
+    v.object({
+      playerId: v.id("players"),
+      twenties: v.optional(v.number()),
+      fouls: v.optional(v.number()),
+      spencers: v.optional(v.number()),
+      kinseys: v.optional(v.number()),
+    }),
+  ),
+);
+
 /** Throw on any blocking validation issue, listing them all at once. */
 function assertValid(game: Parameters<typeof validateGame>[0]): void {
   const errors = errorsOnly(validateGame(game));
@@ -37,11 +82,47 @@ function assertValid(game: Parameters<typeof validateGame>[0]): void {
   }
 }
 
+/**
+ * Reconcile a round's counts with its board.
+ *
+ * **When `discs` is present it is the source of truth and the ring counts are
+ * recomputed from it** (§3.5). This is the only place a write can produce
+ * counts for a placed board, so the two can never disagree — a client that
+ * sends stale counts alongside a board simply has them overwritten rather than
+ * silently persisting a contradiction.
+ *
+ * A round typed into the manual menu has no `discs` at all, and its counts
+ * stand on their own.
+ */
+function reconcile(
+  config: ScoringConfig,
+  fallback: { A: RingCounts; B: RingCounts },
+  teams: { A: { color: DiscColor }; B: { color: DiscColor } },
+  discs: PlacedDisc[] | undefined,
+): { A: RingCounts; B: RingCounts } {
+  if (!discs) return fallback;
+
+  const limit = discsPerTeam(config);
+  for (const color of ["black", "white"] as const) {
+    const placed = placedCount(discs, color);
+    if (placed > limit) {
+      throw new Error(
+        `${placed} ${color} discs placed but only ${limit} are in play this format.`,
+      );
+    }
+  }
+
+  return {
+    A: countsFromDiscs(discs, teams.A.color),
+    B: countsFromDiscs(discs, teams.B.color),
+  };
+}
+
 /** History, newest first. Totals are derived on read, never stored. */
 export const list = query({
-  args: { limit: v.optional(v.number()) },
+  args: { passcode: v.string(), limit: v.optional(v.number()) },
   handler: async (ctx, args) => {
-    await assertAllowlisted(ctx);
+    await assertAllowlisted(ctx, args.passcode);
     const games = await loadAllGames(ctx);
     const limited = args.limit ? games.slice(0, args.limit) : games;
     return limited.map((game) => ({
@@ -53,9 +134,9 @@ export const list = query({
 });
 
 export const get = query({
-  args: { gameId: v.id("games") },
+  args: { passcode: v.string(), gameId: v.id("games") },
   handler: async (ctx, args) => {
-    await assertAllowlisted(ctx);
+    await assertAllowlisted(ctx, args.passcode);
     const game = await loadGame(ctx, args.gameId);
     if (!game) return null;
     return {
@@ -69,9 +150,9 @@ export const get = query({
 
 /** The game currently being entered, if any. Drives "resume where I was". */
 export const inProgress = query({
-  args: {},
-  handler: async (ctx) => {
-    await assertAllowlisted(ctx);
+  args: { passcode: v.string() },
+  handler: async (ctx, args) => {
+    await assertAllowlisted(ctx, args.passcode);
     const open = await ctx.db
       .query("games")
       .withIndex("by_status", (q) => q.eq("status", "in_progress"))
@@ -90,6 +171,7 @@ export const inProgress = query({
 
 export const create = mutation({
   args: {
+    passcode: v.string(),
     playedAt: v.optional(v.number()),
     format: v.union(v.literal("doubles"), v.literal("singles")),
     teams: v.object({
@@ -101,7 +183,7 @@ export const create = mutation({
     notes: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const caller = await assertAllowlisted(ctx);
+    const caller = await assertAllowlisted(ctx, args.passcode);
     const now = Date.now();
 
     const config = {
@@ -132,12 +214,18 @@ export const create = mutation({
         ? { defaultBetCents: args.defaultBetCents }
         : {}),
       ...(args.notes ? { notes: args.notes } : {}),
-      createdBy: caller.player._id,
+      ...(caller.player ? { createdBy: caller.player._id } : {}),
       createdAt: now,
       updatedAt: now,
     });
 
-    await recordEvent(ctx, gameId, caller.player._id, "created", `${args.format} game started`);
+    await recordEvent(
+      ctx,
+      gameId,
+      caller.player?._id ?? null,
+      "created",
+      `${args.format} game started`,
+    );
     return gameId;
   },
 });
@@ -148,26 +236,17 @@ export const create = mutation({
  */
 export const addRound = mutation({
   args: {
+    passcode: v.string(),
     gameId: v.id("games"),
     A: ringCounts,
     B: ringCounts,
-    pointsOverride: v.optional(
-      v.object({ A: v.optional(v.number()), B: v.optional(v.number()) }),
-    ),
-    playerStats: v.optional(
-      v.array(
-        v.object({
-          playerId: v.id("players"),
-          twenties: v.optional(v.number()),
-          fouls: v.optional(v.number()),
-          spencers: v.optional(v.number()),
-          kinseys: v.optional(v.number()),
-        }),
-      ),
-    ),
+    /** The board, when one was placed. Source of truth for the counts above. */
+    discs: v.optional(placedDiscs),
+    pointsOverride,
+    playerStats,
   },
   handler: async (ctx, args) => {
-    const caller = await assertAllowlisted(ctx);
+    const caller = await assertAllowlisted(ctx, args.passcode);
     const stored = await ctx.db.get(args.gameId);
     if (!stored) throw new Error("Game not found.");
     if (stored.deletedAt !== undefined) throw new Error("That game was deleted.");
@@ -180,10 +259,12 @@ export const addRound = mutation({
     const now = Date.now();
 
     const candidate = toCoreGame(stored, existing);
+    const counts = reconcile(candidate.config, args, stored.teams, args.discs);
+
     candidate.rounds.push({
       index,
-      A: args.A,
-      B: args.B,
+      ...counts,
+      ...(args.discs ? { discs: args.discs } : {}),
       ...(args.pointsOverride ? { pointsOverride: args.pointsOverride } : {}),
       ...(args.playerStats ? { playerStats: args.playerStats } : {}),
     });
@@ -192,8 +273,8 @@ export const addRound = mutation({
     await ctx.db.insert("rounds", {
       gameId: args.gameId,
       index,
-      A: args.A,
-      B: args.B,
+      ...counts,
+      ...(args.discs ? { discs: args.discs } : {}),
       ...(args.pointsOverride ? { pointsOverride: args.pointsOverride } : {}),
       ...(args.playerStats ? { playerStats: args.playerStats } : {}),
       createdAt: now,
@@ -209,7 +290,7 @@ export const addRound = mutation({
     await recordEvent(
       ctx,
       args.gameId,
-      caller.player._id,
+      caller.player?._id ?? null,
       "roundAdded",
       `Round ${index + 1} committed`,
     );
@@ -218,69 +299,89 @@ export const addRound = mutation({
   },
 });
 
-/** Fix a mis-tapped round. Re-derives completion from scratch. */
+/**
+ * Fix a mis-tapped round. Re-derives completion from scratch.
+ *
+ * Keyed by `(gameId, index)` rather than a round id, because a round id is not
+ * something the client can hold: `games.list` and `games.get` hand back core's
+ * `Round`, which carries an index and no id — core knows nothing about Convex
+ * (§3.2.2), and leaking document ids through it to make one mutation reachable
+ * would be the wrong end to fix. The index is the round's identity everywhere
+ * else in the app, so it is its identity here too.
+ */
 export const updateRound = mutation({
   args: {
-    roundId: v.id("rounds"),
+    passcode: v.string(),
+    gameId: v.id("games"),
+    /** 0-based, as everywhere else. */
+    index: v.number(),
     A: ringCounts,
     B: ringCounts,
-    pointsOverride: v.optional(
-      v.object({ A: v.optional(v.number()), B: v.optional(v.number()) }),
-    ),
+    discs: v.optional(placedDiscs),
+    pointsOverride,
+    playerStats,
   },
   handler: async (ctx, args) => {
-    const caller = await assertAllowlisted(ctx);
-    const round = await ctx.db.get(args.roundId);
-    if (!round) throw new Error("Round not found.");
-    const stored = await ctx.db.get(round.gameId);
+    const caller = await assertAllowlisted(ctx, args.passcode);
+    const stored = await ctx.db.get(args.gameId);
     if (!stored) throw new Error("Game not found.");
+    if (stored.deletedAt !== undefined) throw new Error("That game was deleted.");
 
     const siblings = await ctx.db
       .query("rounds")
-      .withIndex("by_game", (q) => q.eq("gameId", round.gameId))
+      .withIndex("by_game", (q) => q.eq("gameId", args.gameId))
       .collect();
+    const round = siblings.find((doc) => doc.index === args.index);
+    if (!round) throw new Error(`This game has no round ${args.index + 1}.`);
+
+    const config = toCoreGame(stored, []).config;
+    const counts = reconcile(config, args, stored.teams, args.discs);
+
+    // The patch as it will be written, applied to the in-memory copy first so
+    // the whole game is validated before anything lands.
+    const patch = {
+      ...counts,
+      // `undefined` clears the field, which is what a correction that removes a
+      // board or an override has to do — leaving the old one behind would
+      // re-derive the counts from a board that no longer matches.
+      discs: args.discs,
+      pointsOverride: args.pointsOverride,
+      playerStats: args.playerStats,
+      updatedAt: Date.now(),
+    };
 
     const candidate = toCoreGame(
       stored,
-      siblings.map((doc) =>
-        doc._id === args.roundId
-          ? { ...doc, A: args.A, B: args.B, pointsOverride: args.pointsOverride }
-          : doc,
-      ),
+      siblings.map((doc): Doc<"rounds"> => (doc._id === round._id ? { ...doc, ...patch } : doc)),
     );
     assertValid(candidate);
 
-    await ctx.db.patch(args.roundId, {
-      A: args.A,
-      B: args.B,
-      ...(args.pointsOverride
-        ? { pointsOverride: args.pointsOverride }
-        : { pointsOverride: undefined }),
-      updatedAt: Date.now(),
-    });
+    await ctx.db.patch(round._id, patch);
 
     // A correction can un-finish a game as easily as finish one.
     const standing = gameStanding(candidate.rounds, candidate.config);
-    await ctx.db.patch(round.gameId, {
+    await ctx.db.patch(args.gameId, {
       status: standing.isComplete ? "final" : "in_progress",
       updatedAt: Date.now(),
     });
 
     await recordEvent(
       ctx,
-      round.gameId,
-      caller.player._id,
+      args.gameId,
+      caller.player?._id ?? null,
       "roundEdited",
-      `Round ${round.index + 1} corrected`,
+      `Round ${args.index + 1} corrected`,
     );
+
+    return { index: args.index, standing };
   },
 });
 
 /** Undo the most recent round — the common fix during live entry (§3.5). */
 export const removeLastRound = mutation({
-  args: { gameId: v.id("games") },
+  args: { passcode: v.string(), gameId: v.id("games") },
   handler: async (ctx, args) => {
-    const caller = await assertAllowlisted(ctx);
+    const caller = await assertAllowlisted(ctx, args.passcode);
     const rounds = await ctx.db
       .query("rounds")
       .withIndex("by_game", (q) => q.eq("gameId", args.gameId))
@@ -293,7 +394,7 @@ export const removeLastRound = mutation({
     await recordEvent(
       ctx,
       args.gameId,
-      caller.player._id,
+      caller.player?._id ?? null,
       "roundUndone",
       `Round ${last.index + 1} undone`,
     );
@@ -302,27 +403,39 @@ export const removeLastRound = mutation({
 
 /** Soft delete only (§3.2.4). The row stays; history hides it. */
 export const softDelete = mutation({
-  args: { gameId: v.id("games") },
+  args: { passcode: v.string(), gameId: v.id("games") },
   handler: async (ctx, args) => {
-    const caller = await assertAllowlisted(ctx);
+    const caller = await assertAllowlisted(ctx, args.passcode);
     await ctx.db.patch(args.gameId, { deletedAt: Date.now(), updatedAt: Date.now() });
-    await recordEvent(ctx, args.gameId, caller.player._id, "deleted", "Game deleted");
+    await recordEvent(
+      ctx,
+      args.gameId,
+      caller.player?._id ?? null,
+      "deleted",
+      "Game deleted",
+    );
   },
 });
 
 export const restore = mutation({
-  args: { gameId: v.id("games") },
+  args: { passcode: v.string(), gameId: v.id("games") },
   handler: async (ctx, args) => {
-    const caller = await assertAdmin(ctx);
+    const caller = await assertAdmin(ctx, args.passcode);
     await ctx.db.patch(args.gameId, { deletedAt: undefined, updatedAt: Date.now() });
-    await recordEvent(ctx, args.gameId, caller.player._id, "restored", "Game restored");
+    await recordEvent(
+      ctx,
+      args.gameId,
+      caller.player?._id ?? null,
+      "restored",
+      "Game restored",
+    );
   },
 });
 
 export const setNotes = mutation({
-  args: { gameId: v.id("games"), notes: v.string() },
+  args: { passcode: v.string(), gameId: v.id("games"), notes: v.string() },
   handler: async (ctx, args) => {
-    await assertAllowlisted(ctx);
+    await assertAllowlisted(ctx, args.passcode);
     await ctx.db.patch(args.gameId, { notes: args.notes, updatedAt: Date.now() });
   },
 });

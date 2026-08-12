@@ -10,7 +10,7 @@ import { useMemo, useState, type ReactNode } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 
 import { useStore, useVisibleGames } from "../../data/store";
-import { Card, SegmentedControl } from "../../ui/components";
+import { Card, Loading, SegmentedControl } from "../../ui/components";
 import { Board } from "./Board";
 
 /**
@@ -33,7 +33,7 @@ const DOUBLES_SEATS: SeatKey[] = ["top", "right", "bottom", "left"];
 const SINGLES_SEATS: SeatKey[] = ["top", "bottom"];
 
 export function NewGameScreen(): ReactNode {
-  const { availablePlayers, createGame } = useStore();
+  const { availablePlayers, createGame, isLoading } = useStore();
   const allGames = useVisibleGames();
   const navigate = useNavigate();
   const [params] = useSearchParams();
@@ -171,6 +171,20 @@ export function NewGameScreen(): ReactNode {
   const here = availablePlayers.length;
   const enoughForDoubles = here >= 4;
   const enoughForSingles = here >= 2;
+
+  /*
+   * `availablePlayers` is `players` (Convex, async) ∩ `presentIds`
+   * (localStorage, instant), so until the players land it is empty however many
+   * people you marked in — and the screen below would tell you that you hadn't
+   * marked anyone, then send you to a tab where they're all already ticked.
+   */
+  if (isLoading) {
+    return (
+      <Card>
+        <Loading rows={3} />
+      </Card>
+    );
+  }
 
   if (!enoughForSingles) {
     return (

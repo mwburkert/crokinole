@@ -1,8 +1,14 @@
+import { fileURLToPath } from "node:url";
+
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
 
 export default defineConfig({
+  // The Convex CLI maintains `.env.local` at the repo root, but Vite's project
+  // root is `apps/web` — so without this it never sees `VITE_CONVEX_URL` and the
+  // app boots with no backend URL at all.
+  envDir: fileURLToPath(new URL("../../", import.meta.url)),
   plugins: [
     react(),
     VitePWA({

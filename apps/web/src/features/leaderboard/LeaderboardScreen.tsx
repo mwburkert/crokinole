@@ -12,7 +12,7 @@ import { useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 
 import { useLiveGame, useStore, useVisibleGames } from "../../data/store";
-import { Card, Empty, Money } from "../../ui/components";
+import { Card, Empty, Loading, Money } from "../../ui/components";
 
 interface Row extends PlayerStats {
   displayName: string;
@@ -34,7 +34,7 @@ interface Row extends PlayerStats {
 export function LeaderboardScreen(): ReactNode {
   const games = useVisibleGames();
   const live = useLiveGame();
-  const { players, presentIds, togglePresent } = useStore();
+  const { players, presentIds, togglePresent, isLoading } = useStore();
   const [showAbsent, setShowAbsent] = useState(true);
 
   const tonight = currentNightKey();
@@ -113,7 +113,14 @@ export function LeaderboardScreen(): ReactNode {
       </div>
 
       <Card>
-        {visible.length === 0 ? (
+        {/*
+          Every row here is derived from `players` and `games`, so before either
+          has answered this is an empty table — indistinguishable from a night
+          nobody turned up to. Wait, then say it.
+        */}
+        {isLoading ? (
+          <Loading rows={4} />
+        ) : visible.length === 0 ? (
           <Empty>Nobody played.</Empty>
         ) : (
           <div className="table-wrap">
@@ -149,7 +156,10 @@ export function LeaderboardScreen(): ReactNode {
           </div>
         )}
 
-        {isTonight ? (
+        {/* The instruction only makes sense once there are names to tap: over an
+            empty table it reads as "nobody is here", which is the load window
+            talking, not the roster. */}
+        {isTonight && !isLoading ? (
           <>
             <p className="faint" style={{ margin: "0.75rem 0 0.4rem" }}>
               Tap a name to mark who's here. Only those players show up when you start a game.
@@ -172,7 +182,14 @@ export function LeaderboardScreen(): ReactNode {
         stays resumable from history. Hiding "new game" behind an open game was
         a dead end: there was no way out of a game you'd abandoned.
       */}
-      {isTonight ? (
+      {/*
+        Not while loading, though: `live` is undefined until the games arrive,
+        so this pair would render as the single big accent "New game" — the
+        shape it takes when there is definitively nothing in progress. Tapping
+        that during a mid-game refresh starts a second game. Better to show the
+        actions a beat late than to show the wrong one immediately.
+      */}
+      {isTonight && !isLoading ? (
         <div className="stack" style={{ gap: "var(--gap-sm)" }}>
           {live ? (
             <Link className="btn btn--accent btn--block btn--lg" to={`/games/${live.id}/play`}>

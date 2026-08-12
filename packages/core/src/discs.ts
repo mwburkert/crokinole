@@ -11,19 +11,15 @@
  * (100, 100), independent of how large it's drawn.
  */
 
-import type { DiscColor, RingCounts } from "./types.js";
+import type { DiscColor, PlacedDisc, Region, RingCounts } from "./types.js";
 
-/** Where a disc came to rest. `ditch` scores nothing but is a real placement. */
-export type Region = "twenty" | "fifteen" | "ten" | "five" | "ditch";
-
-export interface PlacedDisc {
-  id: string;
-  color: DiscColor;
-  /** 0–200 board space. */
-  x: number;
-  y: number;
-  region: Region;
-}
+/**
+ * `PlacedDisc` and `Region` are declared in `types.ts` because `Round` carries
+ * positions, and a type both modules need can't live in the one that imports
+ * the other. They are re-exported here, where the geometry that gives them
+ * meaning lives.
+ */
+export type { PlacedDisc, Region } from "./types.js";
 
 export const BOARD_CENTRE = 100;
 export const DISC_RADIUS = 5.5;

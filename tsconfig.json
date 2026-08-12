@@ -2,6 +2,13 @@
   "files": [],
   "references": [
     { "path": "./packages/core" },
+    /*
+     * `convex/` joined the build once a deployment existed and
+     * `convex/_generated` was committed. It points at `tsconfig.build.json`
+     * rather than the CLI-owned `tsconfig.json` beside it — see the comment
+     * in that file for why there are two.
+     */
+    { "path": "./convex/tsconfig.build.json" },
     { "path": "./apps/web" }
   ]
 }

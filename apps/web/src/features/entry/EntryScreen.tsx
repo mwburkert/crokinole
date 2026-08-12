@@ -16,10 +16,17 @@ import { useState, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
 import { useStore } from "../../data/store";
-import { Card, Money } from "../../ui/components";
+import { Card, Empty, Loading, Money } from "../../ui/components";
 import { BoardScorer } from "./BoardScorer";
 import { MatchScoreCard } from "./MatchScoreCard";
 import { ManualEntry } from "./ManualEntry";
+import {
+  TwentiesRows,
+  recordTwenties,
+  toPlayerStats,
+  twentiesFrom,
+  type EnteredTwenties,
+} from "./TwentiesRows";
 
 /**
  * Round entry — §3.5 steps 2 to 5. **This is the screen that has to be fast.**
@@ -32,7 +39,7 @@ import { ManualEntry } from "./ManualEntry";
 export function EntryScreen(): ReactNode {
   const { gameId } = useParams();
   const navigate = useNavigate();
-  const { getGame, addRound, updateRound, players } = useStore();
+  const { getGame, addRound, updateRound, players, isLoading } = useStore();
 
   /** Positions are the source of truth; counts are derived from them (§3.5). */
   const [discs, setDiscs] = useState<PlacedDisc[]>([]);
@@ -50,12 +57,47 @@ export function EntryScreen(): ReactNode {
   const [cardDone, setCardDone] = useState(false);
   /** Shown for a beat after each round so you see the match take shape. */
   const [showCard, setShowCard] = useState(false);
+  /** Per-player twenties for the round in play. */
+  const [liveTwenties, setLiveTwenties] = useState<EnteredTwenties>({});
+  /** Per-player twenties for the committed round being corrected. */
+  const [editTwenties, setEditTwenties] = useState<EnteredTwenties>({});
+  /** Which round `editTwenties` was seeded from — see the re-seed below. */
+  const [twentiesRound, setTwentiesRound] = useState<number | null>(null);
+  /** Whether that seed has been changed, which is what re-enables Save. */
+  const [editTouched, setEditTouched] = useState(false);
 
   const game = gameId ? getGame(gameId) : undefined;
-  if (!game) return <p className="empty">That game is gone.</p>;
+
+  // A query in flight and a game that isn't there look identical through the
+  // seam — both are "no game". Saying "That game is gone" on the first frame of
+  // every cold load reads as data loss on a phone refresh mid-game, so nothing
+  // is declared missing until the store has actually answered.
+  if (isLoading) return <Loading rows={3} />;
+  if (!game) return <Empty>That game is gone.</Empty>;
+
+  // Paging to another round has to bring that round's per-player twenties with
+  // it, or Save would write round 3's breakdown onto round 1. Re-seeding during
+  // render is the supported way to reset state on a prop change — React re-runs
+  // the component before painting, so nothing flashes.
+  if (twentiesRound !== editing) {
+    setTwentiesRound(editing);
+    setEditTwenties(editing === null ? {} : twentiesFrom(game.rounds[editing]?.playerStats));
+    setEditTouched(false);
+  }
 
   const cfg = game.config;
   const standing = gameStanding(game.rounds, cfg);
+
+  // The server re-derives completion from scratch on every write, so correcting
+  // a round can un-finish a finished game as easily as finish one. Nothing here
+  // may latch "the match is over": this is the one flag that would, and it
+  // stands back down the moment the standing says the game is live again.
+  if (!standing.isComplete && cardDone) setCardDone(false);
+  // …and the other way: a correction that *ends* the match hands the screen to
+  // the scorecard, so the sheet that made it happen gets out of the way rather
+  // than reappearing over the settlement a moment later.
+  if (standing.isComplete && !cardDone && showManual) setShowManual(false);
+
   const budget = discsPerTeam(cfg);
   const colorA = game.teams.A.color;
   const colorB = game.teams.B.color;
@@ -65,6 +107,26 @@ export function EntryScreen(): ReactNode {
   const a = manualCounts ? manualCounts.a : countsFromDiscs(discs, colorA);
   const b = manualCounts ? manualCounts.b : countsFromDiscs(discs, colorB);
   const pending = scoreRound(a, b, cfg, totals ? { A: totals.a, B: totals.b } : undefined);
+
+  /**
+   * Whether this round actually has a board behind it.
+   *
+   * Positions are stored and are the source of truth when present (§3.5), so
+   * the one thing the client must never do is send a board and counts that
+   * disagree — the server recomputes the counts from the board on every write.
+   * Two cases deliberately send nothing:
+   *
+   * - **typed into the manual menu.** `discsFromCounts` scatters discs into the
+   *   right rings so the board agrees with what you typed, but those positions
+   *   are invented. Storing them would let you replay a board that never
+   *   existed. A manual round legitimately has no positions and its counts
+   *   stand alone.
+   * - **nothing placed at all.** An empty array is not a board.
+   *
+   * Touching the board clears `manualCounts`, which is what makes it
+   * authoritative again.
+   */
+  const boardIsSource = manualCounts === null && totals === null && discs.length > 0;
 
   const nameOf = (id: string): string =>
     players.find((player) => player.id === id)?.displayName ?? "?";
@@ -107,11 +169,34 @@ export function EntryScreen(): ReactNode {
     setManualCounts(null);
     setTotals(null);
     setConfirming(false);
+    setLiveTwenties({});
+  };
+
+  /** Record one player's twenties for the round in play. */
+  const bumpLive = (team: TeamKey, playerId: string, next: number): void => {
+    setLiveTwenties((current) =>
+      recordTwenties(current, game.teams[team].playerIds, playerId, next),
+    );
+  };
+
+  /** The same, for a committed round being corrected. */
+  const bumpEdit = (team: TeamKey, playerId: string, next: number): void => {
+    setEditTwenties((current) =>
+      recordTwenties(current, game.teams[team].playerIds, playerId, next),
+    );
+    setEditTouched(true);
   };
 
   const write = (): void => {
     if (!gameId) return;
-    addRound(gameId, a, b);
+    // Raw inputs only: the ring counts, the positions they came from, and who
+    // sank the twenties. Nothing derived — the mutation works out the points,
+    // the match score and whether the game is over (§3.2.1).
+    const playerStats = toPlayerStats(liveTwenties, game.teams, { A: a, B: b });
+    addRound(gameId, a, b, {
+      ...(boardIsSource ? { discs } : {}),
+      ...(playerStats ? { playerStats } : {}),
+    });
     reset();
     setShowCard(true);
   };
@@ -125,6 +210,130 @@ export function EntryScreen(): ReactNode {
     }
     write();
   };
+
+  /** The committed round loaded into the scoreboard sheet, if any. */
+  const edited = editing === null ? undefined : game.rounds[editing];
+
+  /**
+   * The scoreboard overlay.
+   *
+   * Built once and rendered from both the live screen and the finished one.
+   * Completion is re-derived from scratch on every write, so a correction can
+   * un-finish a game — which means the finished screen needs a way back in, or
+   * a mis-tapped last round could only ever be fixed from another screen.
+   */
+  const sheet = showManual ? (
+    <div className="overlay" role="dialog" aria-label="Scoreboard">
+      <div className="overlay__sheet">
+        <ManualEntry
+          config={cfg}
+          roundIndex={editing ?? game.rounds.length}
+          roundCount={game.rounds.length}
+          // A finished game has no round in play to page forward onto.
+          {...(standing.isComplete ? { maxIndex: game.rounds.length - 1 } : {})}
+          onNavigate={(index) => {
+            if (standing.isComplete) {
+              setEditing(Math.min(Math.max(index, 0), game.rounds.length - 1));
+              return;
+            }
+            setEditing(index >= game.rounds.length ? null : index);
+          }}
+          a={editing === null ? a : (game.rounds[editing]?.A ?? a)}
+          b={editing === null ? b : (game.rounds[editing]?.B ?? b)}
+          // The twenties below belong to this sheet, not to the counts, so Save
+          // has to know they changed or the only button that records them stays
+          // disabled.
+          extraDirty={editing !== null && editTouched}
+          onApply={(next) => {
+            // Editing a committed round writes straight through; the board
+            // behind the overlay stays on the live round either way.
+            if (editing !== null && gameId) {
+              if ("totals" in next) return;
+              const round = game.rounds[editing];
+              // The stored board survives only while it still describes these
+              // counts. Positions are the source of truth when present (§3.5),
+              // so counts typed over a board they no longer match must replace
+              // it — sending both would have the server recompute the old
+              // board's counts straight back over the correction.
+              const keepsBoard =
+                round !== undefined &&
+                sameCounts(round.A, next.a) &&
+                sameCounts(round.B, next.b);
+              const board = keepsBoard ? round?.discs : undefined;
+              // Always sent, because the mutation clears what it isn't given —
+              // a correction that dropped these would wipe a breakdown nobody
+              // asked it to touch.
+              const playerStats = toPlayerStats(editTwenties, game.teams, {
+                A: next.a,
+                B: next.b,
+              });
+              updateRound(gameId, editing, next.a, next.b, {
+                ...(board ? { discs: board } : {}),
+                ...(playerStats ? { playerStats } : {}),
+              });
+              setEditTouched(false);
+              // Deliberately stays on the round just corrected instead of
+              // jumping back to the live one: you watch the numbers land, and
+              // fixing several in one sitting is what the pager is for.
+              return;
+            }
+            if ("totals" in next) {
+              // Score-only: no detail, so the board stays empty.
+              setTotals(next.totals);
+              setManualCounts(null);
+              setDiscs([]);
+            } else {
+              // Section counts populate the board when the menu closes.
+              setTotals(null);
+              setManualCounts(next);
+              setDiscs(discsFromCounts(next.a, colorA).concat(discsFromCounts(next.b, colorB)));
+            }
+          }}
+          onClose={() => {
+            setShowManual(false);
+            setEditing(null);
+          }}
+        >
+          {edited ? (
+            <>
+              {/* The board this round was actually played on. Storing positions
+                  was a deliberate exception to "nothing derived is stored"
+                  (§3.5) and this is what bought it — a board you can never look
+                  at again is dead weight in the database. */}
+              {edited.discs && edited.discs.length > 0 ? (
+                <div style={{ marginTop: "0.75rem" }}>
+                  <div className="manual__head">Round {edited.index + 1}, as played</div>
+                  <div style={{ maxWidth: "13rem", margin: "0 auto" }}>
+                    <BoardScorer
+                      discs={edited.discs}
+                      onChange={() => {}}
+                      perTeam={budget}
+                      colorA={colorA}
+                      colorB={colorB}
+                      readOnly
+                    />
+                  </div>
+                  <p className="faint" style={{ margin: "0.25rem 0 0", textAlign: "center" }}>
+                    Changing the counts above replaces this board.
+                  </p>
+                </div>
+              ) : null}
+
+              <TwentiesRows
+                teams={game.teams}
+                config={cfg}
+                counts={{ A: edited.A, B: edited.B }}
+                roundIndex={edited.index}
+                entered={editTwenties}
+                onChange={bumpEdit}
+                nameOf={nameOf}
+              />
+            </>
+          ) : null}
+        </ManualEntry>
+      </div>
+    </div>
+  ) : null;
 
   // Auto-finish (§3.5 step 5): the game flips itself the moment a side reaches
   // the target with a lead, shows the settlement, and offers the same four again.
@@ -187,6 +396,22 @@ export function EntryScreen(): ReactNode {
         <Link className="btn btn--block" to={`/games/${game.id}`}>
           See the detail
         </Link>
+
+        {/* The last round is the one most likely to be wrong — it's the one
+            that ended the match — and completion is re-derived on every write,
+            so fixing it here can hand the game back to whoever was losing. */}
+        <button
+          type="button"
+          className="btn btn--ghost btn--block"
+          onClick={() => {
+            setEditing(game.rounds.length - 1);
+            setShowManual(true);
+          }}
+        >
+          Correct a round
+        </button>
+
+        {sheet}
       </div>
     );
   }
@@ -257,45 +482,7 @@ export function EntryScreen(): ReactNode {
       </div>
 
 
-      {showManual ? (
-        <div className="overlay" role="dialog" aria-label="Scoreboard">
-          <div className="overlay__sheet">
-          <ManualEntry
-            config={cfg}
-            roundIndex={editing ?? game.rounds.length}
-            roundCount={game.rounds.length}
-            onNavigate={(index) => setEditing(index >= game.rounds.length ? null : index)}
-            a={editing === null ? a : (game.rounds[editing]?.A ?? a)}
-            b={editing === null ? b : (game.rounds[editing]?.B ?? b)}
-            onApply={(next) => {
-              // Editing a committed round writes straight through; the board
-              // behind the overlay stays on the live round either way.
-              if (editing !== null && gameId) {
-                if ("totals" in next) return;
-                updateRound(gameId, editing, next.a, next.b);
-                setEditing(null);
-                return;
-              }
-              if ("totals" in next) {
-                // Score-only: no detail, so the board stays empty.
-                setTotals(next.totals);
-                setManualCounts(null);
-                setDiscs([]);
-              } else {
-                // Section counts populate the board when the menu closes.
-                setTotals(null);
-                setManualCounts(next);
-                setDiscs(discsFromCounts(next.a, colorA).concat(discsFromCounts(next.b, colorB)));
-              }
-            }}
-            onClose={() => {
-              setShowManual(false);
-              setEditing(null);
-            }}
-          />
-          </div>
-        </div>
-      ) : null}
+      {sheet}
 
       {(
         <BoardScorer
@@ -334,6 +521,19 @@ export function EntryScreen(): ReactNode {
         </div>
       ) : null}
 
+      {/* Twenties (§3.5 step 4). Renders nothing at all unless a side actually
+          sank one, and one collapsed row when it did — the fast path is board →
+          Finish round and this must not get in front of it. */}
+      <TwentiesRows
+        teams={game.teams}
+        config={cfg}
+        counts={{ A: a, B: b }}
+        roundIndex={game.rounds.length}
+        entered={liveTwenties}
+        onChange={bumpLive}
+        nameOf={nameOf}
+      />
+
       {(
         <button
           type="button"
@@ -371,6 +571,21 @@ export function EntryScreen(): ReactNode {
         </button>
       </div>
     </div>
+  );
+}
+
+/**
+ * Whether two ring counts describe the same round.
+ *
+ * Not a scoring rule — four numbers compared, only so a correction can tell
+ * whether the board it is saving over still describes what it is saving.
+ */
+function sameCounts(left: RingCounts, right: RingCounts): boolean {
+  return (
+    left.twenties === right.twenties &&
+    left.fifteens === right.fifteens &&
+    left.tens === right.tens &&
+    left.fives === right.fives
   );
 }
 

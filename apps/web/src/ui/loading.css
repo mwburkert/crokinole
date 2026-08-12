@@ -1,0 +1,86 @@
+/*
+ * Waiting.
+ *
+ * Convex answers in a blink on a good connection and not at all on a bad one,
+ * and the seam can't tell "still loading" from "nothing there" — both arrive as
+ * an empty array. So every empty state defers to this, and this has one job:
+ * hold the space without making a claim about what's coming.
+ *
+ * Deliberately not a spinner. A spinner is a moving thing at the centre of an
+ * otherwise still screen and the eye goes to it and stays; these are bars where
+ * the rows will be, breathing slowly enough to read as "not finished" without
+ * asking to be watched.
+ */
+
+.loading {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-sm);
+  padding: var(--gap-sm) 0;
+}
+
+.loading__bar {
+  width: 100%;
+  height: 1.1rem;
+  border-radius: calc(var(--radius) / 2);
+  background: var(--bg-sunken);
+  animation: loading-breathe 1.8s ease-in-out infinite;
+}
+
+/* A short last line, the way a paragraph ends. A single full-width bar reads as
+   a progress bar — a promise about how long this will take that nothing here
+   can keep. */
+.loading__bar:last-child {
+  width: 62%;
+}
+
+@keyframes loading-breathe {
+  0%,
+  100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 0.85;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .loading__bar {
+    animation: none;
+    opacity: 0.55;
+  }
+}
+
+/* The bars say nothing out loud; this does. Off-screen rather than
+   `display: none`, which would take it out of the accessibility tree too. */
+.loading__label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/*
+ * The board button, before we know whether there's a game to resume.
+ *
+ * Lives with the rest of the waiting states rather than beside the tab bar in
+ * app.css, because it exists for the same reason they do. Compound selectors so
+ * it wins against `.tabbar__link` regardless of which sheet the bundler emits
+ * first.
+ */
+.tabbar__link.tabbar__link--waiting {
+  /* It's a <button> where its neighbours are links — strip the chrome that
+     comes with that and nothing else. */
+  border: 0;
+  background: none;
+  cursor: default;
+  color: var(--ink-faint);
+}
+
+.tabbar__link.tabbar__link--waiting .boardbtn {
+  opacity: 0.6;
+}

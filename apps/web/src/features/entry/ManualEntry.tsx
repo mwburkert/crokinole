@@ -27,6 +27,31 @@ export interface ManualEntryProps {
   roundCount: number;
   /** Ask the parent to switch which round is loaded into `a` / `b`. */
   onNavigate: (index: number) => void;
+
+  /**
+   * Highest round you may page forward to.
+   *
+   * Only set on a finished game, which has no live round to land on — without
+   * it "next" walks off the end of the match into an empty round in play that
+   * doesn't exist.
+   */
+  maxIndex?: number;
+
+  /**
+   * Detail the parent owns, shown above the buttons — the board this round was
+   * played on, and who sank its twenties. It lives out here because it belongs
+   * to the round rather than to the counts, and because the parent is what
+   * writes it.
+   */
+  children?: ReactNode;
+  /**
+   * True when that parent-owned detail has unsaved changes.
+   *
+   * Save is gated on something having actually changed, and `dirty` below can
+   * only see the counts — so without this, attributing a twenty to a partner
+   * and nothing else leaves the only button that would record it disabled.
+   */
+  extraDirty?: boolean;
 }
 
 /**
@@ -39,7 +64,9 @@ export interface ManualEntryProps {
  * It doubles as the scoreboard's back-catalogue: page back through committed
  * rounds to fix one that was typed wrong, then page forward to the live round.
  * The board behind the overlay stays on the live round throughout — only this
- * sheet moves, so a correction never disturbs the round in play.
+ * sheet moves, so a correction never disturbs the round in play. A committed
+ * round's own board and twenties come in through `children`, from the parent
+ * that owns them.
  */
 export function ManualEntry({
   config,
@@ -50,6 +77,9 @@ export function ManualEntry({
   roundIndex,
   roundCount,
   onNavigate,
+  maxIndex,
+  children,
+  extraDirty = false,
 }: ManualEntryProps): ReactNode {
   const [draftA, setDraftA] = useState<RingCounts>({ ...a });
   const [draftB, setDraftB] = useState<RingCounts>({ ...b });
@@ -98,6 +128,8 @@ export function ManualEntry({
 
   /** The live round sits one past the committed ones; everything below is history. */
   const isLive = roundIndex === roundCount;
+  /** Nothing further forward to page to — the live round, or the last of a finished match. */
+  const atLatest = isLive || (maxIndex !== undefined && roundIndex >= maxIndex);
   const budget = discsPerTeam(config);
   const usingTotals = totalA !== "" || totalB !== "";
 
@@ -108,7 +140,8 @@ export function ManualEntry({
     left.fives === right.fives;
 
   /** Nothing to apply until something actually differs. */
-  const dirty = usingTotals || !same(draftA, baseline.a) || !same(draftB, baseline.b);
+  const dirty =
+    extraDirty || usingTotals || !same(draftA, baseline.a) || !same(draftB, baseline.b);
 
   const column = (
     label: string,
@@ -227,7 +260,7 @@ export function ManualEntry({
           type="button"
           className="btn btn--ghost"
           aria-label="Next round"
-          disabled={isLive}
+          disabled={atLatest}
           onClick={() => onNavigate(roundIndex + 1)}
         >
           →
@@ -260,6 +293,8 @@ export function ManualEntry({
           onChange={(event) => setTotalB(event.target.value)}
         />
       </div>
+
+      {children}
 
       <div className="row" style={{ marginTop: "0.75rem", justifyContent: "space-between" }}>
 

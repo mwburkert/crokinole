@@ -10,7 +10,7 @@ import { useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 
 import { useNights, useStore } from "../../data/store";
-import { Badge, Card, Empty, Money } from "../../ui/components";
+import { Badge, Card, Empty, Loading, Money } from "../../ui/components";
 
 /**
  * History (§3.5), grouped by night.
@@ -21,7 +21,7 @@ import { Badge, Card, Empty, Money } from "../../ui/components";
  */
 export function HistoryScreen(): ReactNode {
   const nights = useNights();
-  const { players, softDelete, currentEmail, isSuperAdmin, members } = useStore();
+  const { players, softDelete, currentEmail, isSuperAdmin, members, isLoading } = useStore();
 
   // Who am I, as a player id — so a game can tell whether I was in it.
   const myPlayerId = members.find((member) => member.email === currentEmail)?.playerId ?? null;
@@ -30,10 +30,11 @@ export function HistoryScreen(): ReactNode {
   const nameOf = (id: string): string =>
     players.find((player) => player.id === id)?.displayName ?? "?";
 
-  if (nights.length === 0) {
+  if (isLoading || nights.length === 0) {
     return (
       <Card>
-        <Empty>Nothing logged yet.</Empty>
+        {/* No nights yet and no nights *so far* look identical from here. */}
+        {isLoading ? <Loading rows={4} /> : <Empty>Nothing logged yet.</Empty>}
       </Card>
     );
   }

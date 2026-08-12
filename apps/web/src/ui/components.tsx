@@ -1,6 +1,8 @@
 import { formatCents, type DiscColor } from "@crokinole/core";
 import type { ReactNode } from "react";
 
+import "./loading.css";
+
 export function Card({
   title,
   action,
@@ -46,6 +48,30 @@ export function Badge({
 
 export function Empty({ children }: { children: ReactNode }): ReactNode {
   return <p className="empty">{children}</p>;
+}
+
+/**
+ * What stands where an `Empty` would, until the data has actually answered.
+ *
+ * The two are easy to confuse and the difference is the whole point: the store
+ * hands back an empty array both while a query is in flight and when there is
+ * genuinely nothing, so a screen that renders `Empty` on `length === 0` tells
+ * you your night is missing every time you open the app. Anything with an empty
+ * state checks `isLoading` first and renders this instead.
+ *
+ * `rows` is roughly what's coming — 1 for a line, 4 or so for a table — so the
+ * screen settles rather than jumps when it arrives.
+ */
+export function Loading({ rows = 1 }: { rows?: number }): ReactNode {
+  return (
+    <div className="loading" role="status" aria-busy="true">
+      {/* First in the DOM so the bars keep their "last line is short" rule. */}
+      <span className="loading__label">Loading…</span>
+      {Array.from({ length: rows }, (_, index) => (
+        <span className="loading__bar" key={index} />
+      ))}
+    </div>
+  );
 }
 
 /**

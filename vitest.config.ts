@@ -2,7 +2,14 @@ import { defineConfig } from "vitest/config";
 
 export default defineConfig({
   test: {
-    include: ["packages/*/src/**/*.test.ts", "apps/*/src/**/*.test.{ts,tsx}"],
+    include: [
+      "packages/*/src/**/*.test.ts",
+      "apps/*/src/**/*.test.{ts,tsx}",
+      // `convex/lib/firstNight.test.ts` asserts the money for the 5 August
+      // night against the data that seeds it. The Convex bundler ignores
+      // `*.test.ts`, so the test can sit beside the data without deploying.
+      "convex/**/*.test.ts",
+    ],
     environment: "node",
     coverage: {
       provider: "v8",

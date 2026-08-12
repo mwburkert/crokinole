@@ -19,11 +19,12 @@ import { loadAllGames } from "./lib/model";
 /** The one leaderboard. Records, scoring stats, and money — all authenticated. */
 export const leaderboard = query({
   args: {
+    passcode: v.string(),
     since: v.optional(v.number()),
     until: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    await assertAllowlisted(ctx);
+    await assertAllowlisted(ctx, args.passcode);
 
     const games = await loadAllGames(ctx);
     const players = await ctx.db.query("players").collect();
@@ -48,9 +49,9 @@ export const leaderboard = query({
  * an evening settle once, not five times).
  */
 export const nights = query({
-  args: { limit: v.optional(v.number()) },
+  args: { passcode: v.string(), limit: v.optional(v.number()) },
   handler: async (ctx, args) => {
-    await assertAllowlisted(ctx);
+    await assertAllowlisted(ctx, args.passcode);
     const games = await loadAllGames(ctx);
     const grouped = groupByNight(games);
     const limited = args.limit ? grouped.slice(0, args.limit) : grouped;
