@@ -10,7 +10,7 @@ import {
   type PlacedDisc,
   type Region,
 } from "@crokinole/core";
-import { useCallback, useEffect, useRef, useState, type PointerEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type PointerEvent, type ReactNode } from "react";
 
 /**
  * The board scorer (§3.5).
@@ -106,6 +106,11 @@ export function BoardScorer({
   const [active, setActive] = useState<DiscColor>(colorA);
   const [drag, setDrag] = useState<Drag | null>(null);
   const [hover, setHover] = useState<Region | null>(null);
+  /** A disc in flight from the hole to its team's stash. */
+  const [sinking, setSinking] = useState<{ id: number; color: DiscColor; to: number } | null>(
+    null,
+  );
+
   const [flash, setFlash] = useState<{
     id: number;
     text: string;
@@ -130,6 +135,12 @@ export function BoardScorer({
   const flashId = useRef(0);
 
   const left = remaining(discs, perTeam);
+
+  /** The disc under a board-space point, if any. Twenties aren't on the board. */
+  const discAt = (x: number, y: number): PlacedDisc | undefined =>
+    discs
+      .filter((disc) => disc.region !== "twenty")
+      .find((disc) => Math.hypot(disc.x - x, disc.y - y) <= DISC_RADIUS * 1.3);
   const overHole = drag !== null && hover === "twenty";
 
   useEffect(() => {
@@ -194,8 +205,22 @@ export function BoardScorer({
     setFlash({ id, text, kind, ...at });
     window.setTimeout(
       () => setFlash((current) => (current?.id === id ? null : current)),
-      region === "twenty" ? 1600 : 750,
+      region === "twenty" ? 2600 : 1500,
     );
+  };
+
+  /**
+   * Fly a sunk disc from the hole up to its stash.
+   *
+   * Sinking one is the best thing that happens in a round, and until now it
+   * simply vanished from the centre and silently incremented a row at the top.
+   * Watching it travel is what connects the two.
+   */
+  const launchTwenty = (color: DiscColor): void => {
+    flashId.current += 1;
+    const id = flashId.current;
+    setSinking({ id, color, to: color === colorA ? 7 : 193 });
+    window.setTimeout(() => setSinking((c) => (c?.id === id ? null : c)), 900);
   };
 
   const pointsFor = (region: Region): number =>
@@ -225,9 +250,6 @@ export function BoardScorer({
     holdTimer.current = window.setTimeout(() => {
       const held = pending.current;
       if (!held) return;
-      // Grabbing from a pile or stash adopts that colour — the toggle follows
-      // what you actually picked up rather than making you set it first.
-      setActive(held.color);
       setDrag({
         source: held.source,
         color: held.color,
@@ -288,6 +310,7 @@ export function BoardScorer({
       onChange([...discs, placed]);
       const view = toView(placed.x, placed.y);
       showFlash(placed.region, view.x, view.y);
+      if (placed.region === "twenty") launchTwenty(placed.color);
       return;
     }
 
@@ -318,6 +341,7 @@ export function BoardScorer({
       if (before && before.region !== region) {
         const view = toView(snapped.x, snapped.y);
         showFlash(region, view.x, view.y);
+        if (region === "twenty") launchTwenty(before.color);
       }
       return;
     }
@@ -329,6 +353,7 @@ export function BoardScorer({
     ]);
     const view = toView(snapped.x, snapped.y);
     showFlash(region, view.x, view.y);
+    if (region === "twenty") launchTwenty(drag.color);
   };
 
   const twentiesOf = (color: DiscColor): number =>
@@ -344,6 +369,12 @@ export function BoardScorer({
           // Children run first and claim the press; anything left is a tap on
           // bare board, which places a disc of the active colour.
           if (pending.current) return;
+          // …unless it landed on a disc of the OTHER colour. Those are inert by
+          // design, but inert must mean "nothing happens", not "fall through and
+          // stack a disc of the active colour on top of it" — which read as the
+          // piece changing colour under your finger.
+          const point = pointAt(event);
+          if (point && discAt(point.x, point.y)) return;
           handleDown(event, { kind: "board" }, active);
         }}
         onPointerMove={handleMove}
@@ -351,6 +382,15 @@ export function BoardScorer({
         onPointerCancel={handleUp}
       >
         <BoardArt hover={hover} holeGrow={holeGrow} />
+        {sinking ? (
+          <circle
+            key={`flare-${sinking.id}`}
+            cx={BOARD_CENTRE}
+            cy={BOARD_CENTRE + BOARD_TOP}
+            r={RADII.ditch}
+            className="scorer__flare"
+          />
+        ) : null}
         <RegionHighlight region={hover} />
 
         {/* Twenties, laid out in a row directly under each score card so the
@@ -377,8 +417,10 @@ export function BoardScorer({
           );
         })}
 
-        {/* Placed discs. The inactive colour shrinks back and stops taking input. */}
-        {discs.map((disc) => {
+        {/* Placed discs. Twenties are deliberately absent — a sunk disc has left
+            the board and lives in its team's stash, so drawing it at the centre
+            too showed the same disc in two places at once. */}
+        {discs.filter((disc) => disc.region !== "twenty").map((disc) => {
           const view = toView(disc.x, disc.y);
           const isActive = disc.color === active;
           const isDragging = drag?.movingId === disc.id;
@@ -417,6 +459,22 @@ export function BoardScorer({
               className={`scorer__disc scorer__disc--${drag.color} is-ghost`}
             />
           </g>
+        ) : null}
+
+        {sinking ? (
+          <circle
+            key={sinking.id}
+            r={DISC_RADIUS}
+            className={`scorer__disc scorer__disc--${sinking.color} scorer__sink`}
+            style={
+              {
+                "--sink-x0": `${BOARD_CENTRE}px`,
+                "--sink-y0": `${BOARD_CENTRE + BOARD_TOP}px`,
+                "--sink-x1": `${sinking.to}px`,
+                "--sink-y1": "20px",
+              } as CSSProperties
+            }
+          />
         ) : null}
 
         {flash ? (

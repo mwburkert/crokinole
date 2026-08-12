@@ -1341,15 +1341,16 @@ html { scrollbar-width: none; }
 .scorer__flash--gutter { fill: var(--negative); }
 
 .scorer__flash--twenty {
-  font-size: 34px;
-  animation: twenty-pop 1600ms ease-out forwards, rainbow 900ms linear infinite;
+  font-size: 42px;
+  animation: twenty-pop 2600ms ease-out forwards, rainbow 700ms linear infinite;
 }
 
 @keyframes twenty-pop {
-  0% { opacity: 0; transform: scale(0.6); }
-  18% { opacity: 1; transform: scale(1.25); }
-  70% { opacity: 1; transform: scale(1); }
-  100% { opacity: 0; transform: scale(1.05) translateY(-10px); }
+  0% { opacity: 0; transform: scale(0.5); }
+  10% { opacity: 1; transform: scale(1.35); }
+  20% { opacity: 1; transform: scale(1.1); }
+  80% { opacity: 1; transform: scale(1.1); }
+  100% { opacity: 0; transform: scale(1.15) translateY(-14px); }
 }
 
 @keyframes rainbow {
@@ -1447,4 +1448,61 @@ html { scrollbar-width: none; }
 .scorer__zoneedge.is-ditch {
   stroke: var(--negative);
   stroke-width: 2.5;
+}
+
+/* ── Sinking a twenty ────────────────────────────────────────────────────── */
+
+/*
+ * The disc flies from the hole to its team's stash. cx/cy stay at 0 and the
+ * whole thing is moved with a transform, because transforms are the only way to
+ * animate an SVG circle's position off the main thread — animating cx/cy
+ * directly janks on a phone at exactly the moment you want it smooth.
+ */
+.scorer__sink {
+  pointer-events: none;
+  transform-box: view-box;
+  animation: sink-fly 900ms cubic-bezier(0.3, -0.4, 0.4, 1) forwards;
+}
+
+@keyframes sink-fly {
+  0% {
+    transform: translate(var(--sink-x0), var(--sink-y0)) scale(1);
+    opacity: 1;
+  }
+  35% {
+    transform: translate(
+        calc((var(--sink-x0) + var(--sink-x1)) / 2),
+        calc(var(--sink-y0) - 30px)
+      )
+      scale(1.7);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(var(--sink-x1), var(--sink-y1)) scale(0.85);
+    opacity: 1;
+  }
+}
+
+/* The board itself flares through the spectrum. A twenty should be visible from
+   across the room, not just to whoever is holding the phone. */
+.scorer__flare {
+  pointer-events: none;
+  fill: none;
+  stroke-width: 6;
+  animation: flare-out 1400ms ease-out forwards, rainbow 500ms linear infinite;
+}
+
+@keyframes flare-out {
+  0% { opacity: 0; stroke-width: 2; }
+  15% { opacity: 0.95; stroke-width: 10; }
+  100% { opacity: 0; stroke-width: 26; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scorer__sink,
+  .scorer__flare,
+  .scorer__flash--twenty {
+    animation-duration: 1ms;
+    animation-iteration-count: 1;
+  }
 }
