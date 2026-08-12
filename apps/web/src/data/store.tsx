@@ -33,7 +33,7 @@ import {
   type ReactNode,
 } from "react";
 
-import { GAMES, PLAYERS, type Player } from "./fixtures";
+import { GAMES, MEMBERS, PLAYERS, type Member, type Player, type Role } from "./fixtures";
 
 export interface NewGameInput {
   format: Format;
@@ -53,6 +53,15 @@ interface StoreValue {
   removeLastRound: (gameId: string) => void;
   softDelete: (gameId: string) => void;
   getGame: (gameId: string) => GameWithRounds | undefined;
+
+  // Admin — mirrors convex/admin.ts one-for-one.
+  members: Member[];
+  /** The signed-in user. Fixtures assume the first admin; Convex uses the JWT. */
+  currentEmail: string;
+  isAdmin: boolean;
+  invite: (input: { email: string; displayName: string; role: Role }) => void;
+  setRole: (email: string, role: Role) => void;
+  revoke: (email: string) => void;
 }
 
 const StoreContext = createContext<StoreValue | null>(null);
@@ -61,6 +70,66 @@ let nextId = 1000;
 
 export function StoreProvider({ children }: { children: ReactNode }): ReactNode {
   const [games, setGames] = useState<GameWithRounds[]>(() => [...GAMES]);
+  const [members, setMembers] = useState<Member[]>(() => [...MEMBERS]);
+  const [players, setPlayers] = useState<Player[]>(() => [...PLAYERS]);
+
+  // With Convex this comes from the Access JWT via players.me. In fixtures we
+  // assume you're the first admin so the screen is reachable.
+  const currentEmail = MEMBERS.find((member) => member.role === "admin")?.email ?? "";
+  const isAdmin = members.some(
+    (member) => member.email === currentEmail && member.role === "admin",
+  );
+
+  const invite = useCallback(
+    ({ email, displayName, role }: { email: string; displayName: string; role: Role }): void => {
+      const normalised = email.trim().toLowerCase();
+      const name = displayName.trim();
+      if (!normalised.includes("@") || !name) return;
+
+      setMembers((current) => {
+        if (current.some((member) => member.email === normalised)) return current;
+        const playerId = `p-${name.toLowerCase().replace(/\W+/g, "-")}`;
+        setPlayers((existing) =>
+          existing.some((player) => player.id === playerId)
+            ? existing
+            : [...existing, { id: playerId, displayName: name, shortName: name, isActive: true }],
+        );
+        return [
+          ...current,
+          {
+            email: normalised,
+            role,
+            invitedAt: Date.now(),
+            playerId,
+            displayName: name,
+            hasSignedIn: false,
+          },
+        ];
+      });
+    },
+    [],
+  );
+
+  const setRole = useCallback(
+    (email: string, role: Role): void => {
+      // Never let the last admin demote themselves — unrecoverable without the
+      // Convex dashboard.
+      if (email === currentEmail && role !== "admin") return;
+      setMembers((current) =>
+        current.map((member) => (member.email === email ? { ...member, role } : member)),
+      );
+    },
+    [currentEmail],
+  );
+
+  const revoke = useCallback(
+    (email: string): void => {
+      if (email === currentEmail) return;
+      // Removes permission, never the person — their history still scores.
+      setMembers((current) => current.filter((member) => member.email !== email));
+    },
+    [currentEmail],
+  );
 
   const createGame = useCallback((input: NewGameInput): string => {
     const id = `g-${(nextId += 1)}`;
@@ -134,15 +203,35 @@ export function StoreProvider({ children }: { children: ReactNode }): ReactNode 
 
   const value = useMemo<StoreValue>(
     () => ({
-      players: PLAYERS,
+      players,
       games,
       createGame,
       addRound,
       removeLastRound,
       softDelete,
       getGame,
+      members,
+      currentEmail,
+      isAdmin,
+      invite,
+      setRole,
+      revoke,
     }),
-    [games, createGame, addRound, removeLastRound, softDelete, getGame],
+    [
+      players,
+      games,
+      createGame,
+      addRound,
+      removeLastRound,
+      softDelete,
+      getGame,
+      members,
+      currentEmail,
+      isAdmin,
+      invite,
+      setRole,
+      revoke,
+    ],
   );
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;

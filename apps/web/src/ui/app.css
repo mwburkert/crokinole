@@ -50,6 +50,123 @@
   opacity: 0.8;
 }
 
+.topbar__admin {
+  color: var(--disc-white);
+  text-decoration: none;
+  font-size: 1.25rem;
+  line-height: 1;
+  min-width: 2.75rem;
+  min-height: 2.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+/* ── Board seating (new game) ────────────────────────────────────────────── */
+
+/*
+ * A board with a seat on each side. The side columns get a hard minimum because
+ * a <select> that truncates its own placeholder is worse than a smaller board —
+ * at 375px there is very little room to go round.
+ */
+.table-layout {
+  display: grid;
+  grid-template-columns: minmax(5.25rem, 1fr) minmax(0, 9.5rem) minmax(5.25rem, 1fr);
+  grid-template-rows: auto auto auto;
+  grid-template-areas:
+    ".    top    ."
+    "left board right"
+    ".    bottom .";
+  align-items: center;
+  justify-items: center;
+  gap: var(--gap-xs);
+}
+
+.table-layout--singles {
+  grid-template-columns: 1fr minmax(0, 11rem) 1fr;
+  grid-template-areas:
+    ".  top    ."
+    ".  board  ."
+    ".  bottom .";
+  gap: var(--gap-sm);
+}
+
+.seat--top { grid-area: top; }
+.seat--right { grid-area: right; }
+.seat--bottom { grid-area: bottom; }
+.seat--left { grid-area: left; }
+.table-layout__board { grid-area: board; width: 100%; }
+
+.seat {
+  width: 100%;
+  max-width: 9.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.seat__label {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.seat__select {
+  width: 100%;
+  min-height: var(--tap);
+  padding: 0 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg-raised);
+  color: var(--ink);
+  font-weight: 700;
+  appearance: none;
+  text-align: center;
+  text-align-last: center;
+}
+
+.seat__select--empty {
+  color: var(--ink-faint);
+  font-weight: 500;
+  border-style: dashed;
+}
+
+/* Left and right seats are squeezed beside a round board. */
+.seat--left .seat__select,
+.seat--right .seat__select {
+  font-size: 0.82rem;
+  padding: 0 0.15rem;
+}
+
+.seat--left .seat__label,
+.seat--right .seat__label {
+  font-size: 0.62rem;
+}
+
+.bet-row {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: var(--gap-sm);
+}
+
+.bet-row__input {
+  min-height: var(--tap);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-num);
+  font-size: 1.35rem;
+  font-weight: 700;
+  text-align: center;
+  width: 100%;
+}
+
 /* ── Bottom nav ──────────────────────────────────────────────────────────── */
 
 .tabbar {

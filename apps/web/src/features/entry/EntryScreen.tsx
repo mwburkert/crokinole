@@ -94,7 +94,7 @@ export function EntryScreen(): ReactNode {
 
         <Link
           className="btn btn--accent btn--block btn--lg"
-          to={`/games/new?players=${everyone.join(",")}`}
+          to={`/games/new?format=${cfg.format}&players=${everyone.join(",")}`}
         >
           Start next game, same {everyone.length}
         </Link>

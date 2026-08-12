@@ -24,6 +24,45 @@ export interface Player {
   isActive: boolean;
 }
 
+export type Role = "admin" | "player";
+
+/** Mirrors the `allowlist` table joined to `players` — see `convex/admin.ts`. */
+export interface Member {
+  email: string;
+  role: Role;
+  invitedAt: number;
+  playerId: string | null;
+  displayName: string | null;
+  hasSignedIn: boolean;
+}
+
+export const MEMBERS: Member[] = [
+  {
+    email: "mwburkert@gmail.com",
+    role: "admin",
+    invitedAt: Date.now() - 86_400_000 * 30,
+    playerId: "p-mike",
+    displayName: "Mike",
+    hasSignedIn: true,
+  },
+  {
+    email: "dave@example.com",
+    role: "player",
+    invitedAt: Date.now() - 86_400_000 * 20,
+    playerId: "p-dave",
+    displayName: "Dave",
+    hasSignedIn: true,
+  },
+  {
+    email: "steve@example.com",
+    role: "player",
+    invitedAt: Date.now() - 86_400_000 * 3,
+    playerId: "p-steve",
+    displayName: "Steve",
+    hasSignedIn: false,
+  },
+];
+
 export const PLAYERS: Player[] = [
   { id: "p-mike", displayName: "Mike", shortName: "Mike", isActive: true },
   { id: "p-dave", displayName: "Dave", shortName: "Dave", isActive: true },

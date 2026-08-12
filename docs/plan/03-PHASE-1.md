@@ -353,11 +353,19 @@ simpler but no less important: confirm that **no** query serves data without ide
 This is used standing next to a board, one-handed, possibly with a beer. Everything else can
 be mediocre; this can't.
 
-1. **Setup (once per game).** Date defaults to today. **Doubles/singles toggle, defaulting to
-   doubles** — it sets `discsPerPlayer` and how many players the picker asks for. Pick players
-   from chips; recent partnerships surface first. Tap to assign into two sides; a single "swap"
-   control flips partners. Pick which side is black. Bet: one number input that **autofills
-   every player**, with a disclosure to override individuals.
+1. **Setup (once per game).** Date defaults to today. A **Doubles/Singles** toggle — labelled
+   just that, since nobody needs reminding how many discs they get — sets `discsPerPlayer` and
+   how many seats appear.
+
+   **Built 2026-08-12 as a board with a seat on each side**, rather than the chip-picker this
+   section originally described. **Partners sit across from each other**, so top+bottom is one
+   team and left+right the other, and the seating picture carries the whole team structure. That
+   removes both "swap sides" and "swap partners" — changing a partner is just picking a different
+   name in a seat. "Flip colours" stays, because which side plays black is a real choice the
+   layout can't express. Singles collapses to two seats, top and bottom.
+
+   Bet is a single field titled **Bet** with a `$` prefix, **defaulting to $1**, autofilling
+   every player.
 2. **Round entry.** Two columns, black and white. Each has four steppers: `20 / 15 / 10 / 5`.
    Big `+` targets, tap-and-hold to decrement. Live under each column: that team's round total.
    Between them, in the largest type on screen: **the differential** and who's winning it.

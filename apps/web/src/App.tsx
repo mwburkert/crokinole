@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
 import { NavLink, Route, Routes } from "react-router-dom";
 
-import { StoreProvider, useLiveGame } from "./data/store";
+import { StoreProvider, useLiveGame, useStore } from "./data/store";
+import { AdminScreen } from "./features/admin/AdminScreen";
 import { EntryScreen } from "./features/entry/EntryScreen";
 import { NewGameScreen } from "./features/entry/NewGameScreen";
 import { GameDetailScreen } from "./features/history/GameDetailScreen";
@@ -53,6 +54,7 @@ function TabBar(): ReactNode {
 }
 
 function TopBar(): ReactNode {
+  const { isAdmin } = useStore();
   return (
     <header className="topbar">
       <div className="topbar__inner">
@@ -61,7 +63,14 @@ function TopBar(): ReactNode {
           <span className="disc disc--white" aria-hidden="true" />
           Crokinole
         </h1>
-        <span className="topbar__meta">burkert.app</span>
+        {/* Kept out of the tab bar so the four thumb targets stay wide. */}
+        {isAdmin ? (
+          <NavLink to="/admin" className="topbar__admin" aria-label="Admin">
+            ⚙
+          </NavLink>
+        ) : (
+          <span className="topbar__meta">burkert.app</span>
+        )}
       </div>
     </header>
   );
@@ -80,6 +89,7 @@ export function App(): ReactNode {
             <Route path="/games/:gameId" element={<GameDetailScreen />} />
             <Route path="/games/:gameId/play" element={<EntryScreen />} />
             <Route path="/stats" element={<StatsScreen />} />
+            <Route path="/admin" element={<AdminScreen />} />
             <Route path="*" element={<p className="empty">Nothing here.</p>} />
           </Routes>
         </main>
