@@ -18,6 +18,7 @@
     "build": "npm run build --workspace @crokinole/web",
     "convex:dev": "convex dev",
     "convex:codegen": "convex codegen",
+    "host:dev": "convex dev --once && npm run build && static-hosting upload --dist apps/web/dist",
     "lint": "tsc -b --pretty false"
   },
   "devDependencies": {
@@ -26,5 +27,8 @@
     "convex": "^1.17.4",
     "typescript": "^5.7.2",
     "vitest": "^3.2.7"
+  },
+  "dependencies": {
+    "@convex-dev/static-hosting": "^0.2.1"
   }
 }

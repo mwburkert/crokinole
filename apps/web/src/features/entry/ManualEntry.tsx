@@ -1,10 +1,14 @@
 import {
   discsPerTeam,
   roundPoints,
+  type DiscColor,
   type RingCounts,
   type ScoringConfig,
 } from "@crokinole/core";
 import { useState, type ReactNode } from "react";
+
+/** A side's colour, as a column heading. */
+const labelFor = (color: DiscColor): string => (color === "black" ? "Black" : "White");
 
 const RINGS: { key: keyof RingCounts; label: string }[] = [
   { key: "twenties", label: "20" },
@@ -17,6 +21,19 @@ export interface ManualEntryProps {
   config: ScoringConfig;
   a: RingCounts;
   b: RingCounts;
+  /**
+   * Which colour each side is playing this game.
+   *
+   * ⚠️ Load-bearing, not decoration. These columns were labelled "Black" and
+   * "White" as constants while writing to teams A and B — but which side plays
+   * black is a per-game choice ("Colours" on the new-game screen). Flip it and
+   * the labels lied: the black team's score, typed into the box marked Black,
+   * was recorded against the white team, inverting the round winner, the match
+   * points and the settlement. The board scorer was immune because it works by
+   * colour, so only the typed path — the "just log the number" path — was wrong.
+   */
+  colorA: DiscColor;
+  colorB: DiscColor;
   /** `totals` set means score-only: no section detail, so no board placement. */
   onApply: (next: { a: RingCounts; b: RingCounts } | { totals: { a: number; b: number } }) => void;
   onClose: () => void;
@@ -72,6 +89,8 @@ export function ManualEntry({
   config,
   a,
   b,
+  colorA,
+  colorB,
   onApply,
   onClose,
   roundIndex,
@@ -268,8 +287,8 @@ export function ManualEntry({
       </div>
 
       <div className="manual__cols">
-        {column("Black", draftA, setDraftA, gutterA, setGutterA)}
-        {column("White", draftB, setDraftB, gutterB, setGutterB)}
+        {column(labelFor(colorA), draftA, setDraftA, gutterA, setGutterA)}
+        {column(labelFor(colorB), draftB, setDraftB, gutterB, setGutterB)}
       </div>
 
       <p className="faint" style={{ margin: "0.5rem 0 0.25rem" }}>
@@ -279,17 +298,17 @@ export function ManualEntry({
         <input
           className="manual__field num"
           inputMode="numeric"
-          placeholder="Black"
+          placeholder={labelFor(colorA)}
           value={totalA}
-          aria-label="Black total"
+          aria-label={`${labelFor(colorA)} total`}
           onChange={(event) => setTotalA(event.target.value)}
         />
         <input
           className="manual__field num"
           inputMode="numeric"
-          placeholder="White"
+          placeholder={labelFor(colorB)}
           value={totalB}
-          aria-label="White total"
+          aria-label={`${labelFor(colorB)} total`}
           onChange={(event) => setTotalB(event.target.value)}
         />
       </div>

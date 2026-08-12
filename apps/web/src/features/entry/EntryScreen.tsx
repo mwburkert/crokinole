@@ -249,6 +249,8 @@ export function EntryScreen(): ReactNode {
       <div className="overlay__sheet">
         <ManualEntry
           config={cfg}
+          colorA={colorA}
+          colorB={colorB}
           roundIndex={editing ?? game.rounds.length}
           roundCount={game.rounds.length}
           // A finished game has no round in play to page forward onto.

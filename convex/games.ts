@@ -11,8 +11,8 @@
  */
 
 import {
+  configFor,
   countsFromDiscs,
-  DEFAULT_SCORING,
   discsPerTeam,
   errorsOnly,
   gameStanding,
@@ -204,12 +204,12 @@ export const create = mutation({
     const caller = await assertAllowlisted(ctx, args.passcode);
     const now = Date.now();
 
-    const config = {
-      ...DEFAULT_SCORING,
-      ringValues: { ...DEFAULT_SCORING.ringValues },
-      format: args.format,
-      discsPerPlayer: args.format === "doubles" ? 6 : 8,
-    };
+    // §3.2.2: the rule lives in core and is imported, never restated here.
+    // This used to spell out `args.format === "doubles" ? 6 : 8`, a second copy
+    // of `configFor` — and the config is *snapshotted onto the game* (§3.2.3),
+    // so a disagreement between the two copies would be baked into every game
+    // played before anyone noticed, permanently.
+    const config = configFor(args.format);
 
     // Validate the shape before writing anything.
     assertValid({
@@ -384,14 +384,27 @@ export const updateRound = mutation({
       stored,
       siblings.map((doc): Doc<"rounds"> => (doc._id === round._id ? { ...doc, ...patch } : doc)),
     );
+
+    /*
+     * A correction can un-finish a game as easily as finish one, so the status
+     * is re-derived *before* validating rather than after.
+     *
+     * `toCoreGame` copies the stored status, which is still "final" at this
+     * point. Validating that copy meant `incomplete_final_game` fired the moment
+     * a correction took the winning side back below the target — and it threw
+     * before the patch, so the one flow this mutation exists for ("fix the round
+     * that decided the game") was the one flow guaranteed to fail. Silently:
+     * the seam's writes are fire-and-forget, so Save simply greyed out and the
+     * wrong winner, wrong match score and wrong settlement all stood.
+     */
+    const standing = gameStanding(candidate.rounds, candidate.config);
+    candidate.status = standing.isComplete ? "final" : "in_progress";
     assertValid(candidate);
 
     await ctx.db.patch(round._id, patch);
 
-    // A correction can un-finish a game as easily as finish one.
-    const standing = gameStanding(candidate.rounds, candidate.config);
     await ctx.db.patch(args.gameId, {
-      status: standing.isComplete ? "final" : "in_progress",
+      status: candidate.status,
       updatedAt: Date.now(),
     });
 
