@@ -1246,3 +1246,15 @@
   grid-template-columns: 1fr 1fr;
   gap: var(--gap-sm);
 }
+
+/* The pile is also the colour toggle: tap selects, hold-and-drag takes a disc. */
+.scorer__pilering {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 2;
+  transition: stroke 140ms ease;
+}
+
+.scorer__pile.is-selected .scorer__pilering {
+  stroke: var(--accent);
+}

@@ -61,11 +61,15 @@ interface Drag {
   movingId?: string;
 }
 
-/** One pile per player, in the corners. Top pair is team A, bottom pair team B. */
-const SEATS: { x: number; y: number; team: "A" | "B" }[] = [
-  { x: 17, y: 17, team: "A" },
-  { x: 183, y: 17, team: "A" },
-  { x: 17, y: 183, team: "B" },
+/**
+ * Two piles, one per colour, in the lower corners.
+ *
+ * They are also the colour selector: **tap to select, hold-and-drag to take a
+ * disc.** That collapses two controls into one — the pile you reach for is the
+ * colour you meant, so there was never a reason to state it separately first.
+ */
+const PILES: { x: number; y: number; team: "A" | "B" }[] = [
+  { x: 17, y: 183, team: "A" },
   { x: 183, y: 183, team: "B" },
 ];
 
@@ -76,7 +80,6 @@ export interface BoardScorerProps {
   perTeam: number;
   colorA: DiscColor;
   colorB: DiscColor;
-  singles: boolean;
 }
 
 export function BoardScorer({
@@ -85,7 +88,6 @@ export function BoardScorer({
   perTeam,
   colorA,
   colorB,
-  singles,
 }: BoardScorerProps): ReactNode {
   const [active, setActive] = useState<DiscColor>(colorA);
   const [drag, setDrag] = useState<Drag | null>(null);
@@ -187,6 +189,12 @@ export function BoardScorer({
       // A short press on an existing disc is a no-op — you have to hold to move
       // it, which is what stops a stray tap dragging a disc you meant to keep.
       if (start.source.kind === "disc") return;
+      // Tapping a pile or stash just selects that colour; only a hold takes a
+      // disc from it.
+      if (start.source.kind === "pile" || start.source.kind === "stash") {
+        setActive(start.color);
+        return;
+      }
       if (left[active] <= 0) return;
       const placed = placeAt(point.x, point.y, active, nextId());
       if (!placed) return;
@@ -259,25 +267,24 @@ export function BoardScorer({
         <Stash x={62} color={colorA} count={twentiesOf(colorA)} onDown={handleDown} />
         <Stash x={138} color={colorB} count={twentiesOf(colorB)} onDown={handleDown} />
 
-        {/* Piles in front of each seat. Six per seat. */}
-        {(singles ? [SEATS[0]!, SEATS[3]!] : SEATS).map(
-          (seat, index) => {
-            const color = seat.team === "A" ? colorA : colorB;
-            const view = toView(seat.x, seat.y);
-            return (
-              <Pile
-                key={index}
-                seat={index}
-                x={view.x}
-                y={view.y}
-                color={color}
-                count={Math.ceil(left[color] / (singles ? 1 : 2))}
-                dim={color !== active}
-                onDown={handleDown}
-              />
-            );
-          },
-        )}
+        {/* One pile per colour: tap selects, hold-and-drag takes a disc. */}
+        {PILES.map((pile, index) => {
+          const color = pile.team === "A" ? colorA : colorB;
+          const view = toView(pile.x, pile.y);
+          return (
+            <Pile
+              key={index}
+              seat={index}
+              x={view.x}
+              y={view.y}
+              color={color}
+              count={left[color]}
+              total={perTeam}
+              selected={color === active}
+              onDown={handleDown}
+            />
+          );
+        })}
 
         {/* Placed discs. The inactive colour shrinks back and stops taking input. */}
         {discs.map((disc) => {
@@ -318,18 +325,6 @@ export function BoardScorer({
         ) : null}
       </svg>
 
-      <div className="scorer__toggle" role="group" aria-label="Disc colour">
-        {([colorA, colorB] as DiscColor[]).map((color) => (
-          <button
-            key={color}
-            type="button"
-            className={`swatch swatch--${color}`}
-            aria-pressed={active === color}
-            aria-label={`${color} discs`}
-            onClick={() => setActive(color)}
-          />
-        ))}
-      </div>
     </div>
   );
 }
@@ -376,7 +371,8 @@ function Pile({
   y,
   color,
   count,
-  dim,
+  total,
+  selected,
   onDown,
 }: {
   seat: number;
@@ -384,16 +380,22 @@ function Pile({
   y: number;
   color: DiscColor;
   count: number;
-  dim: boolean;
+  total: number;
+  selected: boolean;
   onDown: (event: PointerEvent, source: Source, color: DiscColor) => void;
 }): ReactNode {
   return (
     <g
-      className="scorer__pile"
-      opacity={dim ? 0.5 : 1}
+      className={`scorer__pile${selected ? " is-selected" : ""}`}
+      opacity={selected ? 1 : 0.55}
       onPointerDown={(event) => onDown(event, { kind: "pile", seat, color }, color)}
+      role="button"
+      aria-pressed={selected}
+      aria-label={`${color} discs, ${count} of ${total} left`}
     >
-      {/* A fixed stack image — it doesn't resize as discs leave, only the count changes. */}
+      {/* Selection ring — the pile doubles as the colour toggle. */}
+      <circle cx={x} cy={y - 1.5} r={DISC_RADIUS + 4} className="scorer__pilering" />
+      {/* A fixed stack image: it never resizes as discs leave, only the count changes. */}
       {[3, 1.5, 0].map((offset) => (
         <circle
           key={offset}
@@ -403,8 +405,8 @@ function Pile({
           className={`scorer__disc scorer__disc--${color}`}
         />
       ))}
-      <text x={x} y={y + 13} className="scorer__count">
-        {count}
+      <text x={x} y={y + 15} className="scorer__count">
+        {count}/{total}
       </text>
     </g>
   );

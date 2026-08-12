@@ -186,7 +186,6 @@ export function EntryScreen(): ReactNode {
           perTeam={budget}
           colorA={colorA}
           colorB={colorB}
-          singles={cfg.format === "singles"}
         />
       )}
 
