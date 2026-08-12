@@ -57,6 +57,18 @@ export function ManualEntry({
   const [totalB, setTotalB] = useState("");
   /** Which round the draft above was seeded from — see the re-seed below. */
   const [loadedRound, setLoadedRound] = useState(roundIndex);
+  /**
+   * What the draft looked like when it was last seeded or applied.
+   *
+   * Compared against, rather than against the `a`/`b` props, because applying a
+   * live round doesn't change those immediately — the parent recomputes them
+   * from the board. Without a local baseline, Apply would stay enabled forever
+   * after the first save.
+   */
+  const [baseline, setBaseline] = useState<{ a: RingCounts; b: RingCounts }>({
+    a: { ...a },
+    b: { ...b },
+  });
 
   // `useState` reads its initial value ONCE, so a new `a`/`b` arriving because
   // the user paged to another round would be ignored and the draft would still
@@ -72,12 +84,22 @@ export function ManualEntry({
     setDraftB({ ...b });
     setTotalA("");
     setTotalB("");
+    setBaseline({ a: { ...a }, b: { ...b } });
   }
 
   /** The live round sits one past the committed ones; everything below is history. */
   const isLive = roundIndex === roundCount;
   const budget = discsPerTeam(config);
   const usingTotals = totalA !== "" || totalB !== "";
+
+  const same = (left: RingCounts, right: RingCounts): boolean =>
+    left.twenties === right.twenties &&
+    left.fifteens === right.fifteens &&
+    left.tens === right.tens &&
+    left.fives === right.fives;
+
+  /** Nothing to apply until something actually differs. */
+  const dirty = usingTotals || !same(draftA, baseline.a) || !same(draftB, baseline.b);
 
   const column = (
     label: string,
@@ -213,13 +235,21 @@ export function ManualEntry({
             } else {
               onApply({ a: draftA, b: draftB });
             }
-            onClose();
+            // Deliberately does NOT close: correcting several rounds in one
+            // sitting is the whole point of the back/forward controls, and
+            // closing after each save fought that.
+            setBaseline({ a: { ...draftA }, b: { ...draftB } });
+            setTotalA("");
+            setTotalB("");
           }}
+          disabled={!dirty}
         >
           {isLive ? "Apply" : `Save round ${roundIndex + 1}`}
         </button>
+        {/* The only way out. Unapplied edits are lost, which is why it says
+            Discard rather than Close. */}
         <button type="button" className="btn btn--ghost" onClick={onClose}>
-          Cancel
+          {dirty ? "Discard" : "Close"}
         </button>
       </div>
     </div>
