@@ -155,6 +155,18 @@ export default defineSchema({
     pointsOverride: v.optional(
       v.object({ A: v.optional(v.number()), B: v.optional(v.number()) }),
     ),
+    /**
+     * Who took the round, when the points were never recorded at all.
+     *
+     * Distinct from `pointsOverride`, and the distinction matters: an
+     * overridden round has a real total someone typed; this one has NO points.
+     * Storing it as 0–0 would let it into every points average as a genuine
+     * score of zero. Rounds like this count toward match points and nothing
+     * else — see `RoundInput.resultOverride` in core.
+     */
+    resultOverride: v.optional(
+      v.union(v.literal("A"), v.literal("B"), v.literal("tie")),
+    ),
     playerStats: v.optional(
       v.array(
         v.object({

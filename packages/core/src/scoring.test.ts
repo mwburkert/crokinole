@@ -109,6 +109,59 @@ describe("scoreRound", () => {
   });
 });
 
+describe("outcome-only rounds", () => {
+  it("awards match points but reports no points", () => {
+    const score = scoreRound(counts(0, 0, 0, 0), counts(0, 0, 0, 0), doubles, undefined, "A");
+    expect(score.result).toBe("A");
+    expect(score.matchPoints).toEqual({ A: 2, B: 0 });
+    expect(score.pointsKnown).toBe(false);
+  });
+
+  it("handles a tie with no points", () => {
+    const score = scoreRound(counts(0, 0, 0, 0), counts(0, 0, 0, 0), doubles, undefined, "tie");
+    expect(score.matchPoints).toEqual({ A: 1, B: 1 });
+    expect(score.pointsKnown).toBe(false);
+  });
+
+  it("beats pointsOverride — an outcome-only round has no total to override", () => {
+    const score = scoreRound(counts(3, 0, 0, 0), counts(0, 0, 0, 0), doubles, { A: 99 }, "B");
+    expect(score.result).toBe("B");
+    expect(score.aPoints).toBe(0);
+    expect(score.pointsKnown).toBe(false);
+  });
+
+  it("is EXCLUDED from round point totals, not counted as zero", () => {
+    // Three outcome-only wins for A: the match is 6-0 but nobody scored a point
+    // we know about. Counting these as 0-0 would drag any average toward zero.
+    const rounds = Array.from({ length: 3 }, (_, index) => ({
+      A: counts(0, 0, 0, 0),
+      B: counts(0, 0, 0, 0),
+      index,
+      resultOverride: "A" as const,
+    }));
+    const standing = gameStanding(rounds, doubles);
+    expect(standing.matchPoints).toEqual({ A: 6, B: 0 });
+    expect(standing.isComplete).toBe(true);
+    expect(standing.roundsPlayed).toBe(3);
+    expect(standing.roundsScored).toBe(0);
+    expect(standing.roundPointsFor).toEqual({ A: 0, B: 0 });
+  });
+
+  it("averages only over the rounds that carry points", () => {
+    // One real round (A scores 40) plus one outcome-only round. The average must
+    // be 40 over one scored round, not 20 over two.
+    const rounds = [
+      { A: counts(2, 0, 0, 0), B: counts(0, 0, 0, 1), index: 0 },
+      { A: counts(0, 0, 0, 0), B: counts(0, 0, 0, 0), index: 1, resultOverride: "A" as const },
+    ];
+    const standing = gameStanding(rounds, doubles);
+    expect(standing.roundsPlayed).toBe(2);
+    expect(standing.roundsScored).toBe(1);
+    expect(standing.roundPointsFor.A).toBe(40);
+    expect(standing.roundPointsFor.A / standing.roundsScored).toBe(40);
+  });
+});
+
 describe("gameStanding", () => {
   it("is not complete before anyone reaches the target", () => {
     const standing = gameStanding([roundOfFives(2, 1)].map((r, index) => ({ ...r, index })), doubles);

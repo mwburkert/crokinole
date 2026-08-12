@@ -70,7 +70,19 @@ export function MatchScoreCard({
 
           <tbody>
             {rounds.map((round, position) => (
-              <tr className="scorecard__row" key={round.index} style={beat(position + 1)}>
+              /*
+               * The newest round is the point of the card, so it gets its own
+               * beat: everything already played is simply present, then that
+               * row's marks draw, its points fade in behind them, and the match
+               * total drops last. Earlier rounds cascading again each time made
+               * the one thing that just happened impossible to pick out.
+               */
+              <tr
+                className="scorecard__row"
+                key={round.index}
+                data-latest={position === rounds.length - 1 ? "true" : undefined}
+                style={beat(position + 1)}
+              >
                 <td className="scorecard__cell">
                   <Mark outcome={outcomeFor("A", round.result)} />
                   <span className="scorecard__points">{round.aPoints}</span>

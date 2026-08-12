@@ -10,7 +10,7 @@ import {
   type PlacedDisc,
   type Region,
 } from "@crokinole/core";
-import { useCallback, useEffect, useRef, useState, type PointerEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type PointerEvent, type ReactNode } from "react";
 
 /**
  * The board scorer (§3.5).
@@ -26,7 +26,20 @@ import { useCallback, useEffect, useRef, useState, type PointerEvent, type React
  */
 
 /** How long a press must last before it becomes a drag. */
-const HOLD_MS = 170;
+const HOLD_MS = 130;
+/**
+ * How far above the fingertip the dragged disc rides, in board units.
+ *
+ * The "offset cursor" pattern. On a phone your finger completely covers a disc
+ * this size, so you're dragging something you can't see and guessing at the
+ * drop. Lifting it clear is the single biggest improvement to touch drag —
+ * and the hit-test uses the LIFTED position, not the finger, so what you see
+ * is exactly what lands.
+ *
+ * Halved from the first pass: enough to clear a fingertip, close enough that
+ * the disc still feels attached to the hand moving it rather than towed.
+ */
+const LIFT = 17;
 /** How long a disc must hover the centre before the hole is fully open. */
 const HOLE_OPEN_MS = 650;
 /** How far the hole opens, as a multiple of its resting radius. */
@@ -40,8 +53,8 @@ const SLOP = 10;
  * directly in front of each seat — a circle in a square leaves the corners free,
  * whereas above and below the board there is nothing to spare.
  */
-const VIEW = 242;
-const BOARD_TOP = 42;
+const VIEW = 246;
+const BOARD_TOP = 32;
 
 /** Board space (0–200, centred 100,100) -> SVG space. */
 const toView = (x: number, y: number): { x: number; y: number } => ({
@@ -73,8 +86,8 @@ interface Drag {
  * colour you meant, so there was never a reason to state it separately first.
  */
 const PILES: { x: number; y: number; team: "A" | "B" }[] = [
-  { x: 17, y: 183, team: "A" },
-  { x: 183, y: 183, team: "B" },
+  { x: 13, y: 194, team: "A" },
+  { x: 187, y: 194, team: "B" },
 ];
 
 export interface BoardScorerProps {
@@ -96,6 +109,11 @@ export function BoardScorer({
   const [active, setActive] = useState<DiscColor>(colorA);
   const [drag, setDrag] = useState<Drag | null>(null);
   const [hover, setHover] = useState<Region | null>(null);
+  /** A disc in flight from the hole to its team's stash. */
+  const [sinking, setSinking] = useState<{ id: number; color: DiscColor; to: number } | null>(
+    null,
+  );
+
   const [flash, setFlash] = useState<{
     id: number;
     text: string;
@@ -116,10 +134,22 @@ export function BoardScorer({
 
   const svgRef = useRef<SVGSVGElement | null>(null);
   const holdTimer = useRef<number | null>(null);
-  const pending = useRef<{ source: Source; x: number; y: number; color: DiscColor } | null>(null);
+  const pending = useRef<{
+    source: Source;
+    x: number;
+    y: number;
+    color: DiscColor;
+    at: number;
+  } | null>(null);
   const flashId = useRef(0);
 
   const left = remaining(discs, perTeam);
+
+  /** The disc under a board-space point, if any. Twenties aren't on the board. */
+  const discAt = (x: number, y: number): PlacedDisc | undefined =>
+    discs
+      .filter((disc) => disc.region !== "twenty")
+      .find((disc) => Math.hypot(disc.x - x, disc.y - y) <= DISC_RADIUS * 1.3);
   const overHole = drag !== null && hover === "twenty";
 
   useEffect(() => {
@@ -161,6 +191,15 @@ export function BoardScorer({
   };
 
   /** A twenty is the moment of the round, so it gets the loudest treatment. */
+  /** A short haptic bump. Confirms a grab you can feel without looking. */
+  const buzz = (ms: number): void => {
+    try {
+      navigator.vibrate?.(ms);
+    } catch {
+      // Unsupported or blocked — purely additive feedback.
+    }
+  };
+
   const showFlash = (region: Region, x: number, y: number): void => {
     const points = pointsFor(region);
     flashId.current += 1;
@@ -170,13 +209,32 @@ export function BoardScorer({
     const text = region === "ditch" ? "Gutter!" : `+${points}`;
     // Centre the twenty on the board rather than on the disc — it's an event,
     // not an annotation.
-    const at = region === "twenty" ? { x: BOARD_CENTRE, y: BOARD_CENTRE + BOARD_TOP } : { x, y };
+    // Clamp inside the viewBox — a "Gutter!" against the left or right rim was
+    // being cut in half by the edge of the SVG.
+    const at =
+      region === "twenty"
+        ? { x: BOARD_CENTRE, y: BOARD_CENTRE + BOARD_TOP }
+        : { x: Math.min(Math.max(x, 26), 174), y: Math.max(y, 12) };
 
     setFlash({ id, text, kind, ...at });
     window.setTimeout(
       () => setFlash((current) => (current?.id === id ? null : current)),
-      region === "twenty" ? 1600 : 750,
+      region === "twenty" ? 2600 : 1500,
     );
+  };
+
+  /**
+   * Fly a sunk disc from the hole up to its stash.
+   *
+   * Sinking one is the best thing that happens in a round, and until now it
+   * simply vanished from the centre and silently incremented a row at the top.
+   * Watching it travel is what connects the two.
+   */
+  const launchTwenty = (color: DiscColor): void => {
+    flashId.current += 1;
+    const id = flashId.current;
+    setSinking({ id, color, to: color === colorA ? 7 : 193 });
+    window.setTimeout(() => setSinking((c) => (c?.id === id ? null : c)), 900);
   };
 
   const pointsFor = (region: Region): number =>
@@ -195,20 +253,40 @@ export function BoardScorer({
     } catch {
       // Not capturable — carry on uncaptured.
     }
-    pending.current = { source, x: point.x, y: point.y, color };
+    pending.current = { source, x: point.x, y: point.y, color, at: performance.now() };
 
     // Touching a pile or stash selects that colour immediately — the same
     // gesture that starts a drag also sets the toggle, so there is never a
     // tap-then-hold.
     if (source.kind === "pile" || source.kind === "stash") setActive(color);
 
+    // A stash holds discs that are already ON the board (sunk in the hole), not
+    // spare ones. Dragging from it must MOVE one of those, the way dragging a
+    // placed disc does — treating it like a pile created a brand new disc, and
+    // once the pile was empty that silently did nothing while the sunk disc sat
+    // there unmoved.
+    let resolved = source;
+    if (source.kind === "stash") {
+      const sunk = [...discs]
+        .reverse()
+        .find((disc) => disc.color === color && disc.region === "twenty");
+      if (!sunk) return; // nothing in the hole to take back out
+      resolved = { kind: "disc", id: sunk.id };
+      pending.current = { source: resolved, x: point.x, y: point.y, color, at: performance.now() };
+    }
+
     cancelHold();
+
+    // Bare board is TAP to place, never hold to drag. Holding on empty board
+    // was starting a drag with nothing in hand and conjuring a disc on release
+    // — most obviously over the hole, where a long press grew it open and then
+    // dropped a twenty you never picked up. You place by tapping and move by
+    // holding; holding nothing should do nothing.
+    if (resolved.kind === "board") return;
+
     holdTimer.current = window.setTimeout(() => {
       const held = pending.current;
       if (!held) return;
-      // Grabbing from a pile or stash adopts that colour — the toggle follows
-      // what you actually picked up rather than making you set it first.
-      setActive(held.color);
       setDrag({
         source: held.source,
         color: held.color,
@@ -216,6 +294,7 @@ export function BoardScorer({
         y: held.y,
         ...(held.source.kind === "disc" ? { movingId: held.source.id } : {}),
       });
+      buzz(14);
       holdTimer.current = null;
     }, HOLD_MS);
   };
@@ -235,7 +314,13 @@ export function BoardScorer({
     }
 
     setDrag({ ...drag, x: point.x, y: point.y });
-    setHover(regionAt(point.x, point.y));
+    const next = regionAt(point.x, point.y - LIFT);
+    if (next !== hover) {
+      setHover(next);
+      // A second bump when you cross into a new region, so you can feel the
+      // target change without watching for it.
+      if (next) buzz(8);
+    }
   };
 
   const handleUp = (event: PointerEvent): void => {
@@ -250,6 +335,11 @@ export function BoardScorer({
       // A short press on an existing disc is a no-op — you have to hold to move
       // it, which is what stops a stray tap dragging a disc you meant to keep.
       if (start.source.kind === "disc") return;
+      // A TAP places; a long press does not. Stopping the hold from starting a
+      // drag wasn't enough on its own — releasing still fell through to here and
+      // placed a disc, so holding on the hole grew it open and then dropped a
+      // twenty you never picked up.
+      if (start.source.kind === "board" && performance.now() - start.at > HOLD_MS) return;
       // Tapping a pile or stash just selects that colour; only a hold takes a
       // disc from it.
       if (start.source.kind === "pile" || start.source.kind === "stash") {
@@ -262,11 +352,14 @@ export function BoardScorer({
       onChange([...discs, placed]);
       const view = toView(placed.x, placed.y);
       showFlash(placed.region, view.x, view.y);
+      if (placed.region === "twenty") launchTwenty(placed.color);
       return;
     }
 
     pending.current = null;
-    const dropped = point ?? { x: drag.x, y: drag.y };
+    // Drop where the DISC is, not where the finger is.
+    const raw = point ?? { x: drag.x, y: drag.y };
+    const dropped = { x: raw.x, y: raw.y - LIFT };
     const region = regionAt(dropped.x, dropped.y);
     setDrag(null);
     setHover(null);
@@ -290,6 +383,7 @@ export function BoardScorer({
       if (before && before.region !== region) {
         const view = toView(snapped.x, snapped.y);
         showFlash(region, view.x, view.y);
+        if (region === "twenty") launchTwenty(before.color);
       }
       return;
     }
@@ -301,10 +395,20 @@ export function BoardScorer({
     ]);
     const view = toView(snapped.x, snapped.y);
     showFlash(region, view.x, view.y);
+    if (region === "twenty") launchTwenty(drag.color);
   };
 
-  const twentiesOf = (color: DiscColor): number =>
-    discs.filter((disc) => disc.color === color && disc.region === "twenty").length;
+  /**
+   * Twenties showing in a team's row.
+   *
+   * A disc in flight is deliberately not counted yet — otherwise it pops into
+   * the row the instant it's sunk and then the animation delivers a disc that's
+   * already there, so you briefly see it twice. It joins the row when it lands.
+   */
+  const twentiesOf = (color: DiscColor): number => {
+    const total = discs.filter((disc) => disc.color === color && disc.region === "twenty").length;
+    return Math.max(0, total - (sinking?.color === color ? 1 : 0));
+  };
 
   return (
     <div className="scorer">
@@ -316,6 +420,12 @@ export function BoardScorer({
           // Children run first and claim the press; anything left is a tap on
           // bare board, which places a disc of the active colour.
           if (pending.current) return;
+          // …unless it landed on a disc of the OTHER colour. Those are inert by
+          // design, but inert must mean "nothing happens", not "fall through and
+          // stack a disc of the active colour on top of it" — which read as the
+          // piece changing colour under your finger.
+          const point = pointAt(event);
+          if (point && discAt(point.x, point.y)) return;
           handleDown(event, { kind: "board" }, active);
         }}
         onPointerMove={handleMove}
@@ -323,11 +433,21 @@ export function BoardScorer({
         onPointerCancel={handleUp}
       >
         <BoardArt hover={hover} holeGrow={holeGrow} />
+        {sinking ? (
+          <circle
+            key={`flare-${sinking.id}`}
+            cx={BOARD_CENTRE}
+            cy={BOARD_CENTRE + BOARD_TOP}
+            r={RADII.ditch}
+            className="scorer__flare"
+          />
+        ) : null}
+        <RegionHighlight region={hover} />
 
         {/* Twenties, laid out in a row directly under each score card so the
             two sides read at a glance without anyone counting a number. */}
-        <Stash x={7} color={colorA} count={twentiesOf(colorA)} onDown={handleDown} />
-        <Stash x={193} color={colorB} count={twentiesOf(colorB)} onDown={handleDown} rightAligned />
+        <Stash x={9} color={colorA} count={twentiesOf(colorA)} onDown={handleDown} />
+        <Stash x={191} color={colorB} count={twentiesOf(colorB)} onDown={handleDown} rightAligned />
 
         {/* One pile per colour: tap selects, hold-and-drag takes a disc. */}
         {PILES.map((pile, index) => {
@@ -348,8 +468,10 @@ export function BoardScorer({
           );
         })}
 
-        {/* Placed discs. The inactive colour shrinks back and stops taking input. */}
-        {discs.map((disc) => {
+        {/* Placed discs. Twenties are deliberately absent — a sunk disc has left
+            the board and lives in its team's stash, so drawing it at the centre
+            too showed the same disc in two places at once. */}
+        {discs.filter((disc) => disc.region !== "twenty").map((disc) => {
           const view = toView(disc.x, disc.y);
           const isActive = disc.color === active;
           const isDragging = drag?.movingId === disc.id;
@@ -358,7 +480,7 @@ export function BoardScorer({
               key={disc.id}
               cx={view.x}
               cy={view.y}
-              r={isDragging ? DISC_RADIUS * 1.5 : isActive ? DISC_RADIUS * 1.15 : DISC_RADIUS * 0.75}
+              r={isDragging ? DISC_RADIUS * 0.9 : isActive ? DISC_RADIUS * 1.15 : DISC_RADIUS * 0.75}
               className={`scorer__disc scorer__disc--${disc.color}${isDragging ? " is-dragging" : ""}`}
               opacity={isDragging ? 0.55 : isActive ? 1 : 0.5}
               style={{ pointerEvents: isActive ? "auto" : "none" }}
@@ -369,14 +491,40 @@ export function BoardScorer({
           );
         })}
 
-        {/* The disc under your finger. */}
+        {/* The disc you're holding, riding above the fingertip and enlarged so
+            it clears a thumb. A crosshair marks the exact landing point, since
+            the disc is no longer where your finger is. */}
         {drag ? (
+          <g style={{ pointerEvents: "none" }}>
+            <line
+              x1={toView(drag.x, drag.y).x}
+              y1={toView(drag.x, drag.y).y}
+              x2={toView(drag.x, drag.y - LIFT).x}
+              y2={toView(drag.x, drag.y - LIFT).y + DISC_RADIUS * 2.1}
+              className="scorer__tether"
+            />
+            <circle
+              cx={toView(drag.x, drag.y - LIFT).x}
+              cy={toView(drag.x, drag.y - LIFT).y}
+              r={DISC_RADIUS * 2.1}
+              className={`scorer__disc scorer__disc--${drag.color} is-ghost`}
+            />
+          </g>
+        ) : null}
+
+        {sinking ? (
           <circle
-            cx={toView(drag.x, drag.y).x}
-            cy={toView(drag.x, drag.y).y}
-            r={DISC_RADIUS * 1.4}
-            className={`scorer__disc scorer__disc--${drag.color} is-ghost`}
-            opacity={0.65}
+            key={sinking.id}
+            r={DISC_RADIUS}
+            className={`scorer__disc scorer__disc--${sinking.color} scorer__sink`}
+            style={
+              {
+                "--sink-x0": `${BOARD_CENTRE}px`,
+                "--sink-y0": `${BOARD_CENTRE + BOARD_TOP}px`,
+                "--sink-x1": `${sinking.to}px`,
+                "--sink-y1": "14px",
+              } as CSSProperties
+            }
           />
         ) : null}
 
@@ -446,6 +594,47 @@ function BoardArt({
   );
 }
 
+/**
+ * The hovered region, called out properly: a filled band plus a bright edge on
+ * BOTH of its boundaries. Brightening the fill alone was too subtle to read
+ * mid-drag, and it never showed which two lines the disc had to stay between.
+ */
+function RegionHighlight({ region }: { region: Region | null }): ReactNode {
+  if (!region || region === "twenty") return null;
+
+  const bounds: Record<Exclude<Region, "twenty">, [number, number]> = {
+    fifteen: [RADII.twenty, RADII.fifteen],
+    ten: [RADII.fifteen, RADII.ten],
+    five: [RADII.ten, RADII.five],
+    ditch: [RADII.five, RADII.ditch],
+  };
+  const [inner, outer] = bounds[region];
+  const mid = (inner + outer) / 2;
+
+  return (
+    <g style={{ pointerEvents: "none" }} className="scorer__zone">
+      <circle
+        cx={BOARD_CENTRE}
+        cy={BOARD_CENTRE + BOARD_TOP}
+        r={mid}
+        fill="none"
+        strokeWidth={outer - inner}
+        className={`scorer__zoneband${region === "ditch" ? " is-ditch" : ""}`}
+      />
+      {[inner, outer].map((r) => (
+        <circle
+          key={r}
+          cx={BOARD_CENTRE}
+          cy={BOARD_CENTRE + BOARD_TOP}
+          r={r}
+          fill="none"
+          className={`scorer__zoneedge${region === "ditch" ? " is-ditch" : ""}`}
+        />
+      ))}
+    </g>
+  );
+}
+
 function Pile({
   seat,
   x,
@@ -468,12 +657,15 @@ function Pile({
   return (
     <g
       className={`scorer__pile${selected ? " is-selected" : ""}`}
-      opacity={selected ? 1 : 0.55}
+      opacity={selected ? 1 : 0.8}
       onPointerDown={(event) => onDown(event, { kind: "pile", seat, color }, color)}
       role="button"
       aria-pressed={selected}
       aria-label={`${color} discs, ${count} of ${total} left`}
     >
+      {/* A press target far larger than the discs it holds — a pile is the most
+          reached-for thing on this screen and it sits in a corner. */}
+      <circle cx={x} cy={y - 1.5} r={DISC_RADIUS + 13} fill="transparent" />
       {/* Selection ring — the pile doubles as the colour toggle. */}
       <circle cx={x} cy={y - 1.5} r={DISC_RADIUS + 4} className="scorer__pilering" />
       {/* A fixed stack image: it never resizes as discs leave, only the count changes. */}
@@ -518,7 +710,7 @@ function Stash({
         <circle
           key={index}
           cx={rightAligned ? x - index * step : x + index * step}
-          cy={20}
+          cy={14}
           r={DISC_RADIUS * 0.85}
           className={`scorer__disc scorer__disc--${color}`}
         />

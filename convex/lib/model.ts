@@ -19,6 +19,7 @@ export function toCoreRound(doc: Doc<"rounds">): Round {
     A: doc.A,
     B: doc.B,
     ...(doc.pointsOverride ? { pointsOverride: doc.pointsOverride } : {}),
+    ...(doc.resultOverride ? { resultOverride: doc.resultOverride } : {}),
     ...(doc.playerStats ? { playerStats: doc.playerStats } : {}),
   };
 }

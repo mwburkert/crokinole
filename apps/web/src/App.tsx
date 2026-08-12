@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { NavLink, Route, Routes } from "react-router-dom";
 
-import { StoreProvider, useLiveGame, useStore } from "./data/store";
+import { StoreProvider, useLiveGame } from "./data/store";
 import { AdminScreen } from "./features/admin/AdminScreen";
 import { EntryScreen } from "./features/entry/EntryScreen";
 import { NewGameScreen } from "./features/entry/NewGameScreen";
@@ -37,9 +37,32 @@ function TabBar(): ReactNode {
         </span>
         History
       </NavLink>
-      <NavLink to={live ? `/games/${live.id}/play` : "/games/new"} className="tabbar__link">
-        <span className="tabbar__glyph" aria-hidden="true">
-          ⊕
+      {/* The primary action, shaped like the thing it starts. Rides above the
+          bar with a collar of the bar's own colour, which is what cuts the top
+          line and reads as a bulge. */}
+      <NavLink
+        to={live ? `/games/${live.id}/play` : "/games/new"}
+        className="tabbar__link tabbar__link--board"
+        aria-label={live ? "Resume game" : "New game"}
+      >
+        <span className="boardbtn" aria-hidden="true">
+          <svg viewBox="0 0 48 48">
+            <circle cx="24" cy="24" r="23" className="boardbtn__frame" />
+            <circle cx="24" cy="24" r="20" className="boardbtn__surface" />
+            <circle cx="24" cy="24" r="13.5" className="boardbtn__ring" />
+            <circle cx="24" cy="24" r="7" className="boardbtn__ring" />
+            {/* Quadrant dividers, as on the real board's outer ring. */}
+            <path
+              d="M33.5 14.5 L38.6 9.4 M14.5 14.5 L9.4 9.4 M33.5 33.5 L38.6 38.6 M14.5 33.5 L9.4 38.6"
+              className="boardbtn__ring"
+            />
+            <circle cx="24" cy="24" r="2.6" className="boardbtn__hole" />
+            {live ? (
+              <path d="M17 12 L37 24 L17 36 Z" className="boardbtn__mark" />
+            ) : (
+              <path d="M24 9 V39 M9 24 H39" className="boardbtn__plus" />
+            )}
+          </svg>
         </span>
         {live ? "Resume" : "New"}
       </NavLink>
@@ -49,30 +72,14 @@ function TabBar(): ReactNode {
         </span>
         Stats
       </NavLink>
+      {/* The gear used to live in a title bar that existed only to hold it. */}
+      <NavLink to="/admin" className="tabbar__link">
+        <span className="tabbar__glyph" aria-hidden="true">
+          ⚙
+        </span>
+        Settings
+      </NavLink>
     </nav>
-  );
-}
-
-function TopBar(): ReactNode {
-  const { isAdmin } = useStore();
-  return (
-    <header className="topbar">
-      <div className="topbar__inner">
-        <h1 className="topbar__title">
-          <span className="disc disc--black" aria-hidden="true" />
-          <span className="disc disc--white" aria-hidden="true" />
-          Crokinole
-        </h1>
-        {/* Kept out of the tab bar so the four thumb targets stay wide. */}
-        {isAdmin ? (
-          <NavLink to="/admin" className="topbar__admin" aria-label="Admin">
-            ⚙
-          </NavLink>
-        ) : (
-          <span className="topbar__meta">burkert.app</span>
-        )}
-      </div>
-    </header>
   );
 }
 
@@ -80,7 +87,6 @@ export function App(): ReactNode {
   return (
     <StoreProvider>
       <div className="app">
-        <TopBar />
         <main className="app__main">
           <Routes>
             <Route path="/" element={<LeaderboardScreen />} />

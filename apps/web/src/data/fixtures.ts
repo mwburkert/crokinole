@@ -1,21 +1,27 @@
 /**
- * Fixtures.
+ * Seed data — the real first night, Wednesday 5 August 2026.
  *
- * §6.2 has Wave 1's UI agent working against fixtures rather than a live Convex
- * deployment, which is what lets backend and frontend proceed independently —
- * and what let this UI be built before `convex dev` had ever run.
+ * Transcribed from the Discord recap. The five game results reconcile exactly
+ * with the win tally posted alongside them (Kinsey 2, Marley 1, Spencer 1,
+ * Burkert 3, Burton 3), which is what gives confidence the parse is right.
  *
- * Names are placeholders drawn from the plan's own examples. Rename them once
- * real players exist; nothing here is load-bearing.
+ * ⚠️ **Round points were never recorded.** The recap carries only the final
+ * match score per game ("6-0", "2-6", …) and its author noted they guessed at
+ * the points. Each round therefore uses `resultOverride` — who took it, and no
+ * claim at all about points. Match points, standings and settlements are exact;
+ * Pts+ and Pts/rd correctly report this night as having no data rather than
+ * as zero.
+ *
+ * The round *pattern* is also reconstructed — a 6–0 can only be three straight
+ * wins, and a 1–5 can only be a tie then two losses, but 2–6 could have been
+ * either one win and three losses or a spread of ties. The simplest reading is
+ * used.
+ *
+ * No emails: they'll be filled in from the admin screen. A player row without
+ * one is exactly the case §3.6 exists for.
  */
 
-import {
-  configFor,
-  type Bet,
-  type GameWithRounds,
-  type RingCounts,
-  type Round,
-} from "@crokinole/core";
+import { configFor, type Bet, type GameWithRounds, type Round } from "@crokinole/core";
 
 export interface Player {
   id: string;
@@ -36,10 +42,17 @@ export interface Member {
   hasSignedIn: boolean;
 }
 
+export const PLAYERS: Player[] = [
+  { id: "p-kinsey", displayName: "Kinsey", shortName: "Kinsey", isActive: true },
+  { id: "p-marley", displayName: "Marley", shortName: "Marley", isActive: true },
+  { id: "p-spencer", displayName: "Spencer", shortName: "Spencer", isActive: true },
+  { id: "p-burkert", displayName: "Burkert", shortName: "Burkert", isActive: true },
+  { id: "p-burton", displayName: "Burton", shortName: "Burton", isActive: true },
+];
+
 /**
  * In Convex this comes from the `SUPER_ADMIN_EMAIL` environment variable — not
- * hardcoded, because this repo is public (§2.0). Fixtures need a value to
- * demonstrate the locked row, so the placeholder lives here only.
+ * hardcoded, because this repo is public (§2.0).
  */
 export const SUPER_ADMIN_EMAIL = "owner@example.com";
 
@@ -47,147 +60,72 @@ export const MEMBERS: Member[] = [
   {
     email: SUPER_ADMIN_EMAIL,
     role: "admin",
-    invitedAt: Date.now() - 86_400_000 * 30,
-    playerId: "p-mike",
-    displayName: "Mike",
+    invitedAt: Date.UTC(2026, 7, 5),
+    playerId: "p-burkert",
+    displayName: "Burkert",
     hasSignedIn: true,
-  },
-  {
-    email: "dave@example.com",
-    role: "player",
-    invitedAt: Date.now() - 86_400_000 * 20,
-    playerId: "p-dave",
-    displayName: "Dave",
-    hasSignedIn: true,
-  },
-  {
-    email: "steve@example.com",
-    role: "player",
-    invitedAt: Date.now() - 86_400_000 * 3,
-    playerId: "p-steve",
-    displayName: "Steve",
-    hasSignedIn: false,
   },
 ];
 
-export const PLAYERS: Player[] = [
-  { id: "p-mike", displayName: "Mike", shortName: "Mike", isActive: true },
-  { id: "p-dave", displayName: "Dave", shortName: "Dave", isActive: true },
-  { id: "p-steve", displayName: "Steve", shortName: "Steve", isActive: true },
-  { id: "p-john", displayName: "John", shortName: "John", isActive: true },
-  { id: "p-anna", displayName: "Anna", shortName: "Anna", isActive: true },
-  { id: "p-priya", displayName: "Priya", shortName: "Priya", isActive: true },
-  { id: "p-tom", displayName: "Tom", shortName: "Tom", isActive: true },
-  { id: "p-ruth", displayName: "Ruth", shortName: "Ruth", isActive: true },
+/**
+ * Wednesday 5 August 2026, the first night.
+ *
+ * The Discord recap is stamped 8/7 — that's when it was *posted*, on the
+ * Friday morning after. The games were the Wednesday.
+ */
+const NIGHT = new Date(2026, 7, 5, 19, 0, 0).getTime();
+
+type Outcome = "A" | "B" | "tie";
+
+/**
+ * Build the rounds for a known match score. Only the outcome is real — see the
+ * warning at the top of this file.
+ */
+function roundsFor(outcomes: Outcome[]): Round[] {
+  return outcomes.map((outcome, index) => ({
+    index,
+    A: { twenties: 0, fifteens: 0, tens: 0, fives: 0 },
+    B: { twenties: 0, fifteens: 0, tens: 0, fives: 0 },
+    // Outcome only: who won is real, the points were never recorded. NOT 1-0,
+    // which would invent a score and drag everyone's Pts/rd toward it.
+    resultOverride: outcome,
+  }));
+}
+
+interface Seed {
+  id: string;
+  minutesIn: number;
+  a: [string, string];
+  b: [string, string];
+  outcomes: Outcome[];
+  betCents: number;
+}
+
+/** Every game of the night, in order. The fifth player sat out each one. */
+const SEEDS: Seed[] = [
+  { id: "g-2608071", minutesIn: 0, a: ["p-kinsey", "p-burton"], b: ["p-spencer", "p-burkert"], outcomes: ["A", "A", "A"], betCents: 100 },
+  { id: "g-2608072", minutesIn: 35, a: ["p-kinsey", "p-marley"], b: ["p-burton", "p-spencer"], outcomes: ["A", "B", "B", "B"], betCents: 200 },
+  { id: "g-2608073", minutesIn: 70, a: ["p-kinsey", "p-burkert"], b: ["p-marley", "p-burton"], outcomes: ["A", "A", "A"], betCents: 100 },
+  { id: "g-2608074", minutesIn: 105, a: ["p-kinsey", "p-spencer"], b: ["p-marley", "p-burkert"], outcomes: ["tie", "B", "B"], betCents: 300 },
+  { id: "g-2608075", minutesIn: 140, a: ["p-spencer", "p-marley"], b: ["p-burton", "p-burkert"], outcomes: ["B", "B", "B"], betCents: 500 },
 ];
 
-function counts(twenties: number, fifteens: number, tens: number, fives: number): RingCounts {
-  return { twenties, fifteens, tens, fives };
-}
-
-function round(index: number, a: RingCounts, b: RingCounts): Round {
-  return { index, A: a, B: b };
-}
-
-function bets(playerIds: string[], amountCents = 500): Bet[] {
+function bets(playerIds: string[], amountCents: number): Bet[] {
   return playerIds.map((playerId) => ({ playerId, amountCents }));
 }
 
-interface GameSeed {
-  id: string;
-  playedAt: number;
-  a: [string, string];
-  b: [string, string];
-  rounds: [RingCounts, RingCounts][];
-  status?: "in_progress" | "final";
-}
-
-function buildGame(seed: GameSeed): GameWithRounds {
-  const playerIds = [...seed.a, ...seed.b];
-  return {
-    id: seed.id,
-    playedAt: seed.playedAt,
-    status: seed.status ?? "final",
-    config: configFor("doubles"),
-    teams: {
-      A: { color: "black", playerIds: [...seed.a] },
-      B: { color: "white", playerIds: [...seed.b] },
-    },
-    bets: bets(playerIds),
-    rounds: seed.rounds.map(([a, b], index) => round(index, a, b)),
-  };
-}
-
-const night = (daysAgo: number, hour: number): number => {
-  const date = new Date();
-  date.setDate(date.getDate() - daysAgo);
-  date.setHours(hour, 0, 0, 0);
-  return date.getTime();
-};
-
-/** Three nights of play. Enough to make every screen look real. */
-export const GAMES: GameWithRounds[] = [
-  buildGame({
-    id: "g-1",
-    playedAt: night(14, 19),
-    a: ["p-mike", "p-dave"],
-    b: ["p-steve", "p-john"],
-    rounds: [
-      [counts(2, 3, 1, 0), counts(1, 2, 2, 1)],
-      [counts(1, 1, 3, 2), counts(3, 2, 1, 0)],
-      [counts(3, 2, 2, 0), counts(1, 1, 1, 2)],
-      [counts(2, 2, 1, 1), counts(2, 3, 0, 1)],
-    ],
-  }),
-  buildGame({
-    id: "g-2",
-    playedAt: night(14, 20),
-    a: ["p-mike", "p-steve"],
-    b: ["p-dave", "p-john"],
-    rounds: [
-      [counts(1, 1, 2, 1), counts(2, 3, 1, 0)],
-      [counts(0, 2, 3, 2), counts(3, 1, 2, 1)],
-      [counts(2, 1, 1, 1), counts(2, 2, 2, 0)],
-    ],
-  }),
-  buildGame({
-    id: "g-3",
-    playedAt: night(7, 19),
-    a: ["p-anna", "p-priya"],
-    b: ["p-tom", "p-ruth"],
-    rounds: [
-      [counts(3, 2, 1, 0), counts(1, 2, 1, 2)],
-      [counts(2, 3, 0, 1), counts(2, 1, 3, 0)],
-      [counts(1, 2, 2, 1), counts(1, 2, 2, 1)],
-      [counts(3, 1, 2, 0), counts(0, 2, 2, 2)],
-    ],
-  }),
-  buildGame({
-    id: "g-4",
-    playedAt: night(7, 20),
-    a: ["p-mike", "p-anna"],
-    b: ["p-john", "p-ruth"],
-    rounds: [
-      [counts(1, 3, 2, 0), counts(2, 2, 1, 1)],
-      [counts(2, 2, 2, 0), counts(1, 1, 2, 2)],
-      [counts(0, 2, 2, 2), counts(3, 2, 1, 0)],
-      [counts(2, 2, 1, 1), counts(1, 3, 1, 1)],
-      [counts(3, 1, 1, 1), counts(1, 1, 2, 2)],
-    ],
-  }),
-  buildGame({
-    id: "g-5",
-    playedAt: night(2, 19),
-    a: ["p-dave", "p-priya"],
-    b: ["p-steve", "p-tom"],
-    rounds: [
-      [counts(2, 2, 2, 0), counts(2, 2, 1, 1)],
-      [counts(1, 1, 2, 2), counts(3, 2, 1, 0)],
-      [counts(3, 2, 1, 0), counts(1, 2, 2, 1)],
-      [counts(2, 3, 1, 0), counts(2, 1, 2, 1)],
-    ],
-  }),
-];
+export const GAMES: GameWithRounds[] = SEEDS.map((seed) => ({
+  id: seed.id,
+  playedAt: NIGHT + seed.minutesIn * 60_000,
+  status: "final",
+  config: configFor("doubles"),
+  teams: {
+    A: { color: "black", playerIds: [...seed.a] },
+    B: { color: "white", playerIds: [...seed.b] },
+  },
+  bets: bets([...seed.a, ...seed.b], seed.betCents),
+  rounds: roundsFor(seed.outcomes),
+}));
 
 export const playerName = (id: string): string =>
   PLAYERS.find((player) => player.id === id)?.displayName ?? "Unknown";

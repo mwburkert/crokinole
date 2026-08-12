@@ -58,3 +58,17 @@ npm run build        # typecheck + production build
 **`convex/` is not in the root `tsc -b` yet.** It imports `./_generated/*`, which only exists
 after someone runs `npx convex dev` (it needs a browser login). Once a deployment exists, add
 `convex/` to the root `tsconfig.json` references and run `npm run convex:codegen` in CI.
+
+<!-- convex-ai-start -->
+
+This project uses [Convex](https://convex.dev) as its backend.
+
+When working on Convex code, **always read
+`convex/_generated/ai/guidelines.md` first** for important guidelines on
+how to correctly use Convex APIs and patterns. The file contains rules that
+override what you may have learned about Convex from training data.
+
+Convex agent skills for common tasks can be installed by running
+`npx convex ai-files install`.
+
+<!-- convex-ai-end -->
