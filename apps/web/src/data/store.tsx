@@ -88,6 +88,15 @@ interface StoreValue {
    * as data loss. Every screen with an empty state checks this first.
    */
   isLoading: boolean;
+  /**
+   * True while the member list itself is still in flight.
+   *
+   * Separate from `isLoading` because `admin.listMembers` can only be
+   * subscribed to *after* `players.me` says you're an admin — so it starts one
+   * render after `isLoading` goes false, and the settings screen spent that
+   * round trip announcing "Players — 0 / Nobody yet." over a full roster.
+   */
+  membersLoading: boolean;
 
   players: Player[];
   games: GameWithRounds[];
@@ -197,6 +206,9 @@ export function StoreProvider({ children }: { children: ReactNode }): ReactNode 
    * loading forever.
    */
   const isLoading = gameRows === undefined || playerDocs === undefined || me === undefined;
+
+  /** See `membersLoading` on `StoreValue`. Never true for a non-admin, who never subscribes. */
+  const membersLoading = isAdmin && memberRows === undefined;
 
   // A loading query is `undefined`; the seam is arrays, so every screen sees an
   // empty one for the first frame rather than a crash. `isLoading` is what tells
@@ -568,6 +580,7 @@ export function StoreProvider({ children }: { children: ReactNode }): ReactNode 
   const value = useMemo<StoreValue>(
     () => ({
       isLoading,
+      membersLoading,
       players,
       games,
       createGame,
@@ -590,6 +603,7 @@ export function StoreProvider({ children }: { children: ReactNode }): ReactNode 
     }),
     [
       isLoading,
+      membersLoading,
       players,
       games,
       createGame,

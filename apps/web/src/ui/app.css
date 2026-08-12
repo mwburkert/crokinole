@@ -1718,3 +1718,22 @@ html { scrollbar-width: none; }
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+
+/*
+ * More discs typed into the manual sheet than the format has.
+ *
+ * Sits directly above the totals row, so the counts that caused it are still on
+ * screen. Uses the sunken surface rather than an alarm colour: nothing is being
+ * lost here — a write is being refused *before* it can lose anything, which is
+ * the opposite of the silent discard this replaced.
+ */
+.manual__warn {
+  margin: var(--gap-sm) 0 0.25rem;
+  padding: var(--gap-sm) var(--gap);
+  border-radius: var(--radius);
+  background: var(--bg-sunken);
+  border: 1px solid var(--line);
+  color: var(--ink);
+  font-size: 0.85rem;
+  line-height: 1.35;
+}

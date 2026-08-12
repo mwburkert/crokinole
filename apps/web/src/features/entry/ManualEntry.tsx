@@ -1,5 +1,6 @@
 import {
   discsPerTeam,
+  discsUsed,
   roundPoints,
   type DiscColor,
   type RingCounts,
@@ -162,6 +163,22 @@ export function ManualEntry({
   const dirty =
     extraDirty || usingTotals || !same(draftA, baseline.a) || !same(draftB, baseline.b);
 
+  /**
+   * More discs typed than exist.
+   *
+   * The server refuses these outright (`too_many_discs` is a blocking error in
+   * core's `validateGame`), and the seam's writes are fire-and-forget — so
+   * without this the round was accepted here, thrown away there, and the entry
+   * screen showed the between-rounds scorecard as though it had committed. The
+   * match score simply didn't move and the numbers were gone. Blocked at the
+   * button instead, where there is something to point at.
+   *
+   * Totals-only entry is exempt: it makes no claim about discs at all.
+   */
+  const overBudget =
+    !usingTotals &&
+    (discsUsed(draftA) + gutterA > budget || discsUsed(draftB) + gutterB > budget);
+
   const column = (
     label: string,
     counts: RingCounts,
@@ -291,6 +308,11 @@ export function ManualEntry({
         {column(labelFor(colorB), draftB, setDraftB, gutterB, setGutterB)}
       </div>
 
+      {overBudget ? (
+        <p className="manual__warn" role="alert">
+          That's more than {budget} discs a side. Fix the counts, or log totals only.
+        </p>
+      ) : null}
       <p className="faint" style={{ margin: "0.5rem 0 0.25rem" }}>
         {budget} discs a side. Or skip the detail and log totals only:
       </p>
@@ -345,7 +367,7 @@ export function ManualEntry({
             setTotalA("");
             setTotalB("");
           }}
-          disabled={!dirty}
+          disabled={!dirty || overBudget}
         >
           {isLive ? "Apply" : `Save round ${roundIndex + 1}`}
         </button>

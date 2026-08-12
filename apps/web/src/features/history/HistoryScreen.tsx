@@ -21,10 +21,23 @@ import { Badge, Card, Empty, Loading, Money } from "../../ui/components";
  */
 export function HistoryScreen(): ReactNode {
   const nights = useNights();
-  const { players, softDelete, currentEmail, isSuperAdmin, members, isLoading } = useStore();
+  const { players, softDelete, currentEmail, isSuperAdmin, isAdmin, members, isLoading } =
+    useStore();
 
   // Who am I, as a player id — so a game can tell whether I was in it.
   const myPlayerId = members.find((member) => member.email === currentEmail)?.playerId ?? null;
+
+  /*
+   * 🕐 The shared passphrase carries no identity, so "was I in this game?"
+   * has no answer: `currentEmail` is "" and every member's email is null, so
+   * the lookup above never matches and `isSuperAdmin("")` is false. That made
+   * `canManage` false for everyone and silently removed Resume and Delete from
+   * every row — an abandoned game could then only be deleted from its own
+   * detail screen. With one shared secret everybody is equally trusted, which
+   * is the same rule `convex/admin.ts` and the seam already apply when there is
+   * no caller to compare against.
+   */
+  const anonymous = currentEmail === "";
   const [expanded, setExpanded] = useState<string | null>(null);
 
   const nameOf = (id: string): string =>
@@ -56,6 +69,7 @@ export function HistoryScreen(): ReactNode {
               game={game}
               nameOf={nameOf}
               canManage={
+                (anonymous && isAdmin) ||
                 isSuperAdmin(currentEmail) ||
                 (myPlayerId !== null &&
                   [...game.teams.A.playerIds, ...game.teams.B.playerIds].includes(myPlayerId))

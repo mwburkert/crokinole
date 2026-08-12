@@ -24,14 +24,22 @@ import { QrCode } from "./QrCode";
  * app, this allowlist decides what they may *do*. See `convex/admin.ts`.
  */
 export function AdminScreen(): ReactNode {
-  const { isLoading, members, currentEmail, isAdmin, isSuperAdmin } = useStore();
+  const { isLoading, membersLoading, members, currentEmail, isAdmin, isSuperAdmin } =
+    useStore();
   const [adding, setAdding] = useState(false);
   const [openMenu, setOpenMenu] = useState<string | null>(null);
 
   // `players.me` hasn't answered yet, so `isAdmin` is still false. Without this
   // an admin gets a beat of "Nothing to see here." before the screen flips —
   // the same "loading reads as missing" failure the entry screen has.
-  if (isLoading) {
+  //
+  // `membersLoading` is the second half of it, and it needs saying: the member
+  // list can only be subscribed to *once* `players.me` has answered that you're
+  // an admin, so it is still in flight on the very render `isLoading` goes
+  // false. Waiting on `isLoading` alone left this screen — the app's roster —
+  // announcing "Players — 0 / Nobody yet." over five real people, for a whole
+  // round trip, every single visit.
+  if (isLoading || membersLoading) {
     return (
       <Card>
         {/* Five rows because five regulars is what's coming — the list settles
