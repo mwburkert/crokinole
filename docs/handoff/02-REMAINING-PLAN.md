@@ -18,7 +18,12 @@ Partly begun by the owner. Sequence in §7.7:
    give one login, via Access's global session token.
 4. Zone SSL to **Full (strict)** before any DNS flip.
 5. Wire `auth.config.ts` per app with that app's AUD, plus the `/admin/token`
-   Pages Function.
+   **Worker `fetch` handler with `run_worker_first`** (§7.5a).
+   > ⚠️ **Corrected 2026-08-12:** this said "Pages Function". That construct does
+   > not exist on a Workers static-assets deployment, and without
+   > `run_worker_first` the path silently serves `index.html` instead of the
+   > token. Also: **step 1 is done** — `burkert.app` was registered on
+   > 2026-08-12. See `docs/plan/08-SEQUENCING.md`.
 
 Hosting is decided and researched: crokinole and oh-heck on **Cloudflare Workers
 static** (static asset requests are free and unlimited — no ceiling at any

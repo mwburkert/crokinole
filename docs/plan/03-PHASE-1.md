@@ -527,7 +527,7 @@ Definitions of done are deliberately testable — they're what the QA agents in 
 | # | Task | Owner | DoD |
 |---|---|---|---|
 | **T0** | Repo scaffold: workspaces, TS strict, Vite, Convex init, CI green | solo | `npm ci && npm run typecheck && npm test` passes on a PR |
-| **T1** | `packages/core`: types, `DEFAULT_SCORING`, `roundPoints`, `scoreRound`, `gameStanding`, `settle`, validators | agent A | 100% branch coverage on scoring; includes the 3-round-minimum test and a property test that **a completed game is never level** (⚠️ see below) |
+| **T1** | `packages/core`: types, `DEFAULT_SCORING`, `roundPoints`, `scoreRound`, `gameStanding`, `settle`, validators | agent A | Meets `vitest.config.ts`'s coverage thresholds (**95%**, not 100%); includes the 3-round-minimum test and a property test that **`settle()` never pays out on a level or incomplete game** (⚠️ see below) |
 | **T2** | `convex/schema.ts` + queries/mutations + `assertAllowlisted` | agent B | Schema deploys; a mutation called without auth throws; soft-delete hides from history but not from the DB |
 | **T3** | App shell: routing, design tokens, layout, auth wiring | agent C | All five routes render behind correct auth; installable as a PWA |
 | **T4** | Entry screen (§3.5) | agent D | A full 3-round game can be entered in under 60s on a phone; undo works |
@@ -541,9 +541,20 @@ Definitions of done are deliberately testable — they're what the QA agents in 
 > points never exceed target+1"*. **That property is false**, and §3.4's `winBy` subsection
 > already said so — with ties and a margin requirement a game can finish 7–5 or beyond. The
 > correction had been applied in §3.4 but **not here**, so the false assertion survived in the
-> one place an agent actually reads as its definition of done. The replacement invariant — *a
-> completed game is never level* — is the one that matters, because money is on the table. The
-> full invariant list is now in `docs/qa/WAVE-3-G-RULES-FUZZ.md`.
+> one place an agent actually reads as its definition of done.
+>
+> ⚠️ **The first replacement was wrong too, in the opposite direction.** It asked for *"a
+> completed game is never level"* — which is **vacuously true of `gameStanding` by
+> construction**, since `isComplete` requires a non-`undefined` leader, so a level game can
+> never be complete whatever you feed it. Swapping a false property for an unfalsifiable one is
+> its own kind of failure, and it is recorded here rather than quietly fixed. The property now
+> asked for tests the **consumer**: *`settle()` never pays out on a level or incomplete game*.
+> That is falsifiable, because `settle` need not derive completion the same way `gameStanding`
+> does — and it is where money actually leaves. Full invariant list in
+> `docs/qa/WAVE-3-G-RULES-FUZZ.md`.
+>
+> Also corrected: the DoD said "100% branch coverage on scoring". `vitest.config.ts` enforces
+> **95%**. The number in the DoD was never the number in the build.
 
 ---
 

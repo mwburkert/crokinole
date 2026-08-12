@@ -80,10 +80,15 @@ signature, issuer, **and AUD** all check out, then resolves `.email` to a `playe
 
 > ✅ **Re-verified 2026-08-12 (second pass) against primary sources — this correction holds, and
 > now rests on documentation rather than inference.** Cloudflare states that *"Cloudflare Access
-> assigns a unique AUD tag to each application"*, that the AUD *"will never change unless you
-> delete or recreate the Access application"*, and — decisively — that within a multi-hostname
-> application *"an OAuth token obtained through any one domain is valid for all domains in the
-> same application"*. One application is one security boundary. Three applications are three.
+> assigns a unique AUD tag to each application"* and that the AUD *"will never change unless you
+> delete or recreate the Access application"*. **That pair alone carries the conclusion:** one
+> application means one AUD, and the AUD is what Convex validates. One application is one
+> security boundary; three applications are three.
+>
+> A second quote is often cited alongside — that within a multi-hostname application *"an OAuth
+> token obtained through any one domain is valid for all domains in the same application"*. **It
+> is corroborating, not decisive**, because it describes Access's *Managed OAuth* access tokens,
+> while what Convex validates is the `CF_Authorization` Access JWT. Do not lean on it.
 > ([validating-json](https://developers.cloudflare.com/cloudflare-one/access-controls/applications/http-apps/authorization-cookie/validating-json/),
 > [managed-oauth](https://developers.cloudflare.com/cloudflare-one/access-controls/applications/http-apps/managed-oauth/))
 >
@@ -102,9 +107,11 @@ trailing slash and Convex requires an exact `iss` match, so copy it verbatim.
 
 Two corrections to how it is *used*:
 
-1. **⚠️ `identity.email` is not guaranteed to be present.** Convex's `UserIdentity` promises only
-   `tokenIdentifier`, `subject` and `issuer`; every OIDC field including `email` is optional and
-   provider-dependent, and the `customJwt` docs never promise `email` is mapped. Cloudflare
+1. **⚠️ `identity.email` is not guaranteed to be present.** Convex's `UserIdentity` types every
+   OIDC field including `email` as optional and provider-dependent, and the `customJwt` docs
+   name only `subject`, `issuer` and `tokenIdentifier` as top-level fields. **That is an
+   argument from silence, not a documented exclusion** — the docs do not say `email` is
+   unavailable, they simply do not promise it. Cloudflare
    Access does put `email` at the top level of its token, so this very probably works — but
    `assertAllowlisted` resolves the caller *entirely* by email and throws *"Access token carries
    no email claim"* if it is absent, which would lock out everybody at once. **Verify
@@ -192,13 +199,15 @@ Cloudflare wins on renewal for all three. Cheap first-year offers elsewhere lose
 > their embedded pricing JSON both say $22.98. Cloudflare's at-cost advantage at renewal is
 > therefore **$8.78/yr, not $3.78/yr**.
 >
-> All three Cloudflare figures were re-checked against Cloudflare's live registrar search on
-> 2026-08-12 and are exact, including "Renews at $14.20". **Method caveat worth recording:**
-> Cloudflare publishes no static per-TLD price list on any public page — `/tlds` and
-> `/tld-policies` name TLDs and registry operators but carry no prices. The only primary source
-> is the live search UI. A parallel research strand concluded the Cloudflare `.app` price was
-> "unverifiable from any public page" and anchored to Porkbun instead; that strand simply did
-> not query the search UI. **The $14.20 figure stands.**
+> ⚠️ **The Cloudflare figures are weakly sourced, and that should be said plainly.** They come
+> from a single observation of Cloudflare's **live registrar search UI** on 2026-08-12, which
+> showed `.app` at $14.20 and "Renews at $14.20". **Cloudflare publishes no static per-TLD price
+> list on any public page** — `/tlds` and `/tld-policies` name TLDs and registry operators but
+> carry no prices — so there is nothing citable to link to and nothing a future reader can
+> re-check without repeating the search. Two parallel research strands disagreed here: one read
+> the search UI, the other concluded the price was unverifiable from any public page. **Treat
+> $14.20 as a session observation, not a citation**, and re-check at renewal. It is the number
+> the cost table and the "~$14/yr" headline rest on.
 
 **⚠️ You must move DNS to Cloudflare nameservers.** Partial/CNAME setup is Business-plan-only,
 and the orange cloud is what enforces Access. Cloudflare Registrar requires their nameservers
@@ -338,9 +347,11 @@ export default {
 **Security note.** Echoing the raw header is only meaningful because the hostname is behind an
 Access application — a client can send any header it likes, so on an ungated host this endpoint
 would happily echo an attacker's own string. That is harmless here (Convex validates the token's
-signature itself), but do not reuse this pattern anywhere the echo is trusted. Access rotates
-its signing key every 6 weeks with a 7-day overlap, so anything that verifies must use the
-remote JWKS rather than a pinned key.
+signature itself), but do not reuse this pattern anywhere the echo is trusted. Anything that
+verifies an Access token must fetch the **remote JWKS** rather than pin a key, because Access
+rotates its signing keys periodically. *(The commonly quoted "every 6 weeks with a 7-day
+overlap" is uncited here — treat the rotation as real and the interval as unverified. Fetching
+the JWKS is correct either way.)*
 
 **Also corrected: SSL mode is not strictly zone-wide.** §7.3 implies you cannot vary it per
 hostname on the free plan. You can — **Configuration Rules are available on Free** (10 rules)
@@ -492,9 +503,15 @@ auth design for all three apps.
    what Convex validates (§7.1). Separate applications still give one login, via the global
    session token.
 5. Note each application's **AUD tag** — its Convex deployment needs its own.
-6. Wire `auth.config.ts` in each Convex project (§7.1) and the `/admin/token` Pages Function.
-7. Set the zone's SSL/TLS mode to **Full (strict)**. It is zone-wide: Workers custom domains are
-   indifferent, but Render needs it or you get redirect loops on Flexible.
+6. Wire `auth.config.ts` in each Convex project (§7.1) and the `/admin/token` **Worker `fetch`
+   handler with `run_worker_first`** (§7.5a). ⚠️ **Not a "Pages Function"** — that construct does
+   not exist on a Workers static-assets deployment, and without `run_worker_first` the path
+   silently serves `index.html` instead of the token.
+7. Set the zone's SSL/TLS mode to **Full (strict)**. Workers custom domains are indifferent, but
+   Render needs it or you get redirect loops on Flexible. It is the **zone-wide default** — and
+   per §7.5a, **Configuration Rules (free, 10 rules) can override it per hostname**, which is the
+   escape hatch if meal-planner's cutover ever needs a different mode without touching the other
+   two apps.
 8. Migrate meal-planner (§7.8).
 
 ---

@@ -11,11 +11,22 @@ Specified in `docs/plan/06-ORCHESTRATION.md` §6.3. **It has never run.**
 
 ## How to run them
 
-Fire all three at once — they are independent and read-only, so they cannot
-collide. Each brief is self-contained; hand an agent one file.
+Each brief is self-contained; hand an agent one file. **Fire them the moment the
+Convex migration lands** — they are the gate between "it typechecks" and "it is
+trusted".
 
-**Fire them the moment the Convex migration lands.** They are the gate between
-"it typechecks" and "it is trusted".
+⚠️ **They are not all safely concurrent, despite being "read-only".** G is pure —
+it touches only `packages/core` and can run alongside anything. **H and I both hit
+the shared Convex dev deployment:** H's Task 1 explicitly *calls every function*
+and Task 3 attempts `admin.setRole`, `admin.invite`, `players.claim` and
+`games.softDelete`, while I reconciles money against `stats.nights` on that same
+deployment. §6.1 names the single shared dev deployment "the single biggest
+hazard in this project", and a mutation H fires mid-run is a number I then
+reconciles against.
+
+**Run G in parallel with either, but run H and I sequentially** — or give one its
+own deployment. If they must overlap, run I first and H second, since H is the
+one that writes.
 
 ## Why these three are separated from the agents that write the code
 
@@ -30,11 +41,14 @@ straight to `*.convex.cloud`, which no Cloudflare zone fronts (§3.2.5, §7.1).
 `assertAllowlisted` is the **only** thing between the public internet and this
 data, and one missing call is a full read and write breach.
 
-As of 2026-08-12 all 23 Convex functions call a guard as their literal first
-statement, so H would pass today. **That is the baseline it must be re-checked
-against after the migration, not a reason to skip it** — the migration adds
-functions, and the interim shared passcode is exactly the kind of temporary
-bypass that outlives its reason.
+As of 2026-08-12, on branch `plan/remaining`, all 23 Convex functions call a
+guard as their literal first statement. **That is a baseline to re-check against,
+not evidence that H would pass.** With `auth.config.ts` emitting `providers: []`
+until the Access env vars are set, every one of H's token attacks is refused for
+the same trivial reason — they pass *vacuously* and prove nothing about AUD
+isolation. A real H run needs Access live. The migration also adds functions, and
+the interim shared passcode is exactly the kind of temporary bypass that outlives
+its reason.
 
 The sibling audit on the same day found this failure mode already live in the
 neighbouring app: meal-planner's Convex `kv` functions are public with no caller

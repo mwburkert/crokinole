@@ -71,9 +71,15 @@ prerequisite.
 |---|---|---|---|---|
 | 1 | **Wave 3 QA: agents G, H, I in parallel** (`docs/qa/`) | agent ×3 | 1 session each | migration landing |
 | 2 | **Make `ci` a required status check** on the `main` ruleset | agent | 10 min | nothing — see §8.3 |
-| 3 | **Add `convex/` to the root `tsc -b`** so CI typechecks the backend | agent | 1–2h | see §8.3, not a one-liner |
-| 4 | Add the gitleaks pre-commit hook (§2.5) | agent | 20 min | nothing |
-| 5 | Fix the stale `gh auth refresh -u` claim in `README.md` | agent | 5 min | done in this PR |
+| 3 | Add the gitleaks pre-commit hook (§2.5) | agent | 20 min | nothing |
+| 4 | Fix the stale `gh auth refresh -u` claim in `README.md` | agent | 5 min | done in this PR |
+
+⚠️ **"Add `convex/` to the root `tsc -b`" is deliberately NOT in this tier**, though
+it looks like it belongs. CI would have to run `convex codegen` before typechecking
+(because `_generated/` is gitignored), and codegen against a deployment needs a
+`CONVEX_DEPLOY_KEY` that **nobody has provisioned** — `AGENTS.md` notes the generated
+files today require an interactive browser login. So it needs the owner to mint a
+deploy key and add it as a repo secret first. It sits in Tier 2 as item 9a.
 
 ### Tier 2 — needs the owner first, then an agent
 
@@ -87,6 +93,7 @@ prerequisite.
 | 11 | Retire the interim passcode (`docs/handoff/02-REMAINING-PLAN.md` §Retire the passcode) | agent | 1h | 9, 10, coordinate with migration agent |
 | 12 | Invitations — Route A, Access Group API (§7.9) | agent | ~½d | 6, 7 |
 | 13 | Resend + verified sending domain for invite email | owner + agent | 1h | 6 |
+| 9a | **Mint a `CONVEX_DEPLOY_KEY`, add it as a repo secret**, then add `convex/` to the root `tsc -b` and `convex:codegen` to CI | **owner**, then agent | 15 min + 1–2h | nothing, but needs the owner |
 
 ### Tier 3 — later, deliberately
 
@@ -120,6 +127,7 @@ do. The README's prescribed refresh is unnecessary; the note has been corrected
 in place.
 
 **⚠️ A gap neither handoff mentions: CI does not typecheck the Convex backend.**
+⚠️ **And it cannot be fixed without the owner** — see §8.2 item 9a.
 The root `tsconfig.json` references only `packages/core` and `apps/web`, so
 `npm run typecheck` — and therefore CI — never compiles a line of `convex/`. This
 is not a one-line fix. `convex/tsconfig.json` is Convex's stock generated config:
@@ -134,10 +142,14 @@ imports will not resolve. Budget 1–2 hours, not five minutes.
 is no `.pre-commit-config.yaml`, no husky, no lefthook. The PR template and
 `AGENTS.md`/`CLAUDE.md` **do** exist, contrary to the README's state list.
 
-**The `gh` account reverting to `mwburkert-struct`** is confirmed — it is the
-active account right now. Root cause not found; it is a global CLI setting, so
-the likeliest candidate is another tool or another repo's workflow calling
-`gh auth switch`. Worth a `gh auth status` check before any push.
+**The `gh` account reverting to `mwburkert-struct` is real and was reproduced on
+2026-08-12** — a `gh auth switch -u mwburkert` held, then had silently reverted
+by the time of the next `git push`, which 403'd. Root cause not found.
+`gh auth setup-git` was tested and is **not** the cause. It is a global CLI
+setting, so the likeliest candidate is a concurrent `gh` process or another
+repo's tooling. **Reliable workaround: `gh auth switch -u mwburkert` immediately
+before pushing, and verify with `gh auth status` after.** Both accounts hold the
+`workflow` scope, so nothing else needs refreshing.
 
 ---
 
@@ -149,18 +161,36 @@ problems that outrank everything in this plan.**
 
 **First, a trap for anyone auditing it:** the main checkout at `C:\dev\meal-planner`
 is ~2 months stale and is **not** the live code. It sits on
-`prepare-private-online-deployment`, which was never merged. The live code is
-`master`, visible in the `new-features` worktree, where another agent landed 14
-commits on 2026-08-12. Reading `C:\dev\meal-planner\lib\db.ts` directly reads
-dead code.
+`prepare-private-online-deployment`, which was never merged. The live branch is
+**`master`**, where another agent landed 14 commits on 2026-08-12. Reading
+`C:\dev\meal-planner\lib\db.ts` directly reads dead code.
+
+⚠️ **And do not substitute the `new-features` worktree for it** — that directory
+is checked out on branch `new-features`, which is itself two commits *ahead* of
+master, so it is a third version rather than the live one. **Read master
+explicitly: `git show master:lib/db.ts`.**
 
 **The `DATABASE_URL` question is resolved, and the answer is "wrong question
 now".** On the stale branch the handoff's warning was exactly right — `lib/db.ts`
 silently fell back to a SQLite file under `data/` on Render's ephemeral
-filesystem. On `master` that fallback is **gone**: storage moved to Convex and
-the code now fails closed in production. So the data-loss bug is fixed *if
-master is what Render deploys* — and **that is only visible in the Render
-dashboard**. See the escalation list.
+filesystem. On `master` storage moved to Convex and a guard was added:
+`assertLocalSqliteAllowed()`, which throws **only when
+`process.env.NODE_ENV === "production"`**.
+
+⚠️ **The fallback itself is still there.** `@libsql/client` is still a
+dependency, `db()` still `mkdirSync`s `data/` and opens the SQLite file, and
+`kvGet`/`kvList`/`kvSet` each still have a live SQLite branch, taken whenever the
+configured Convex URL is empty. That guard is the only thing in front of it, and
+it turns on one environment variable.
+
+🚨 **So the data-loss bug has re-entered through the new cron service.** master's
+`render.yaml` adds a `type: cron` service running `npm run scheduler:run` →
+`npx -y tsx scripts/run-scheduler.ts`. **`tsx` does not set
+`NODE_ENV=production`** — only `next start` does, which is exactly why the web
+service is safe. On the cron container the guard passes, and if the Convex URL is
+unset there, `kvSet` writes silently to an ephemeral SQLite file that dies with
+the container. **The web service is protected; the cron service is not.** Verify
+the Convex URL is set on **both** services, not just the web one.
 
 **Two live security findings:**
 
@@ -226,8 +256,16 @@ Ordered by urgency.
 3. **Which branch does Render actually deploy?** If it is still
    `prepare-private-online-deployment`, the original silent-SQLite data-loss bug
    is live and none of the Convex work is running.
-4. **Is `NEXT_PUBLIC_CONVEX_URL` set on the Render service?** If not, the live
-   app throws on every DB call in production.
+4. 🚨 **Is the Convex URL set on BOTH Render services — web *and* cron?** These
+   two fail in opposite directions, which is why the question has to be asked
+   twice:
+   - On the **web** service, `next start` sets `NODE_ENV=production`, so
+     `assertLocalSqliteAllowed()` throws and the app **fails loudly** on every DB
+     call if the URL is missing. Bad, but visible.
+   - On the **cron** service, `npx tsx` does **not** set `NODE_ENV=production`,
+     so the guard passes and `kvSet` **silently writes to ephemeral SQLite** that
+     dies with the container. **This is the original data-loss bug, re-entered
+     through the new service** — and it is invisible.
 5. **Confirm the `burkert.app` registration was you.** It happened at 06:16 UTC
    today. If it was not, someone else took the name hours before this was
    written.
@@ -254,6 +292,8 @@ Ordered by urgency.
   finding above is a report, not a change.
 - **Phase 2 and Phase 3 stay closed** until §4.6 is answered from real use.
   ⚠️ One correction there: §4.5's "highest-value item", **night grouping with a
-  per-night settlement, is already built** — `packages/core/src/night.ts` plus
-  `groupByNight`, and `convex/stats.ts:nights` already returns a per-night
-  settlement. The handoff still lists it as the top thing to do. It is done.
+  per-night settlement, is already built** — `packages/core/src/night.ts`
+  (`nightKey`, `gamesOnNight`, `nightHistory`) plus `groupByNight` in
+  `stats.ts`, wired through `store.tsx` to `HistoryScreen`, and
+  `convex/stats.ts:nights` already returns a per-night settlement. The handoff
+  still lists it as the top thing to do. It is done.

@@ -77,22 +77,34 @@ Then for the night as a whole:
 | Match points for / against | Sum across games |
 | Night grouping | All five games land on **one** night. `nightKey` resets at 3am, not midnight — confirm the app agrees, and check whether a game timestamped after midnight would still group here |
 
-## The published expectation — and how to treat it
+## The published expectation — deliberately not printed here
 
-`docs/handoff/01-CONVEX-MIGRATION.md` states the night settles to:
+A published settlement for this night exists, and it is **kept in a separate
+file** so that reading this brief does not hand you the answer:
+`docs/qa/answer-keys/I-night-settlement.md`.
 
-> Burkert **+$8**, Burton **+$7**, Kinsey **−$3**, Marley **−$5**, Spencer **−$7**
+**Do not open it until your own numbers are saved.** Compute first, then compare
+against the app *and* the key. Three-way agreement is the result worth having;
+if the app and the key agree but you do not, say so loudly rather than assuming
+you are wrong.
 
-That sums to zero. It was re-derived from the fixture on 2026-08-12 and matched.
-
-**Do not read those numbers before you compute.** Cover them. They are the
-answer key, and the point of this exercise is an independent second derivation —
-if you anchor on the key you will find the arithmetic that produces it. Compute
-first, then compare against both the app *and* the published figures. Three-way
-agreement is the result worth having; if the app and the doc agree but you do
-not, say so loudly rather than assuming you are wrong.
+⚠️ **There is a second copy of the answer that is harder to dodge:** the same
+figures appear in `docs/handoff/01-CONVEX-MIGRATION.md`. **Do not read that
+document until step 4.**
 
 ## Where to compare against
+
+> ⚠️ **Check this prerequisite before promising a three-way comparison — as of
+> 2026-08-12 two of the three columns collapse into one.** The screens render
+> from `fixtures.ts` via `store.tsx`, so "screen" and "fixture" are currently the
+> *same source*, not independent ones. And **there is no seed script in the tree**
+> — §8.2 item 14's "only the 5 Aug night is in" refers to the fixture, not to any
+> deployment — so the Convex column is empty until someone seeds it.
+>
+> If you run before the migration has seeded Convex, **report the Convex column
+> as NOT TESTED**. Do not quietly reconcile the fixture against itself and call
+> it a three-way agreement; that is the exact false-pass this wave exists to
+> prevent.
 
 The app exposes the night settlement at `convex/stats.ts:nights`, and per-player
 aggregates at `convex/stats.ts:leaderboard`. Compare against **both** the query

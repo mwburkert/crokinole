@@ -26,10 +26,10 @@ This is the one place where "read-only" needs a precise definition, because you
 cannot property-test anything without writing a test.
 
 - ✅ You **may create one new test file**, `packages/core/src/wave3-properties.test.ts`.
-  This is deliberate: `vitest.config.ts` only discovers
-  `packages/*/src/**/*.test.ts`, so a harness anywhere else — including under
-  `docs/` — **will never run**. Creating that one new file is the only way to do
-  this job.
+  This is deliberate: `vitest.config.ts` discovers only
+  `packages/*/src/**/*.test.ts` and `apps/*/src/**/*.test.{ts,tsx}`, so a harness
+  anywhere else — including under `docs/` — **will never run**. Creating that one
+  new file is the only way to do this job.
 - ✅ You **may** write findings to `docs/qa/findings/G/`.
 - ✅ You **may** add `fast-check` as a devDependency **in your worktree only**,
   to run the harness.
@@ -77,10 +77,22 @@ integers, `discsUsed(counts) <= discsPerTeam(cfg)`, and a config that is either
    - `isComplete` is true iff some team has `>= targetMatchPoints` **and** leads
      by `>= winBy`.
    - `winner` is set iff `isComplete`, and is the leading team.
-   - **A completed game is never level.** This is the one that matters — money
-     is involved. Search hard for a rounds sequence that completes with
-     `matchPoints.A === matchPoints.B`. If you find one, it is the highest
-     severity finding available in this brief.
+   - ⚠️ **Do not spend budget on "a completed game is never level" as a property
+     of `gameStanding`.** It is **vacuously true by construction**: `leader` is
+     derived as `A > B ? "A" : B > A ? "B" : undefined` and `isComplete` requires
+     `leader !== undefined`, so a level game can never be complete whatever you
+     feed it. It also follows trivially from the `isComplete` iff above, so it is
+     not an independent property.
+     *(This brief asked for exactly that test in its first draft, as the
+     replacement for the false `target + 1` one. Swapping a false property for a
+     vacuous one is its own kind of failure; it is recorded here so nobody
+     reintroduces it.)*
+   - ✅ **Test the consumer instead — that is where money actually moves.**
+     Assert that **`settle()` never returns a non-empty payout for a game whose
+     match points are level**, and never pays out on an incomplete game. That is
+     falsifiable, because `settle` does not necessarily re-derive completion the
+     same way `gameStanding` does — so the two *can* disagree, and if they ever
+     do, somebody gets paid for a game nobody won.
    - Match points are non-decreasing as rounds are appended.
    - The 3-round minimum: no sequence of two rounds can complete a game at
      `targetMatchPoints: 5, matchPointsWin: 2, matchPointsTie: 1`.
@@ -90,10 +102,17 @@ integers, `discsUsed(counts) <= discsPerTeam(cfg)`, and a config that is either
 ### Settlement — `settle.ts`
 
 9. **A settlement always sums to zero.** Over any set of bets, any winner, any
-   stake distribution. If `Math.round` in the proportional branch can make it
-   sum to ±1 cent, that is a real finding — chase it deliberately with stakes
-   that do not divide evenly (three winners at $3.33, unequal doubles stakes,
-   a 1-cent bet).
+   stake distribution. Chase it with stakes that do not divide evenly (three
+   winners at $3.33, unequal doubles stakes, a 1-cent bet).
+   > ⚠️ **Do not go hunting for a `Math.round` rounding bug.** §3.4's snippet
+   > uses `Math.round`, but that snippet is *illustrative prose* — the real
+   > `settle.ts` uses **largest-remainder allocation with `Math.floor`**, with a
+   > comment explaining why round-each-share was rejected. Reading the doc as if
+   > it were the implementation is exactly the mistake this wave exists to catch.
+   > **The genuinely reachable failure is different:** `settle` maps over
+   > `game.bets` but collapses by `playerId`. A **duplicate bet** for one player
+   > — which is a real `IssueCode`, `duplicate_bet` — double-counts in
+   > `potCents` while emitting two identical net rows. Construct that case.
 10. Equal stakes reduce to the even split: four equal bets ⇒ each winner `+stake`
     and each loser `−stake` exactly.
 11. A player who did not bet appears nowhere in the settlement, and every player
@@ -108,12 +127,19 @@ integers, `discsUsed(counts) <= discsPerTeam(cfg)`, and a config that is either
     for that colour.
 14. `regionAt` is total over the board: every point either maps to a region or
     to `null` (the ditch), never to an exception.
-15. `snapIntoRegion(x, y, region)` produces a point for which
-    `regionAt` returns that same region. Round-trip it. Boundary points are the
-    interesting inputs — a disc scores **the lowest value of any region it
-    touches** (§3.1), so check the code implements *touching*, using
-    `DISC_RADIUS`, and not merely centre-containment. Getting this wrong is
-    invisible in normal play and wrong in exactly the cases people argue about.
+15. `snapIntoRegion(x, y, region)` produces a point for which `regionAt` returns
+    that same region. Round-trip it, with boundary points as the interesting
+    inputs.
+    > ⚠️ **Do not file "`regionAt` ignores `DISC_RADIUS`" as a §3.1 violation.**
+    > `regionAt(x, y)` takes no radius and is *deliberately* centre-containment;
+    > the "lowest value of any region it touches" rule is enforced by
+    > `snapIntoRegion`, which moves the disc wholly inside one region. Reporting
+    > the split as a bug would be a false finding.
+    > **The real unasked question is worth your time instead:** a `PlacedDisc`
+    > stores `region` *and* `x`/`y`, and `countsFromDiscs` trusts the stored
+    > `region`. Can they be made to disagree — by a write path that sets one
+    > without the other? If so, the stored board and the ring counts derived
+    > from it diverge, which §3.5 says can never happen.
 16. `placementComplete(discs, perTeam)` agrees with `placedCount` for both
     colours.
 
@@ -138,9 +164,14 @@ integers, `discsUsed(counts) <= discsPerTeam(cfg)`, and a config that is either
 
 ### Aggregation — `stats.ts`
 
-22. `aggregateStats` over a set of games: games played = won + lost + drawn, and
-    every player's `netCents` equals the sum of their per-game settlements
-    (`netCentsFor`). Cross-check the two independent paths against each other.
+22. `aggregateStats` over a set of games: every player's `netCents` equals the
+    sum of their per-game settlements (`netCentsFor`). Cross-check the two
+    independent paths against each other.
+    > Note `PlayerStats` has `gamesPlayed`, `gamesWon` and `gamesLost` and **no
+    > `gamesDrawn`** — so "played = won + lost + drawn" is unwritable as stated.
+    > The question worth asking is whether `gamesPlayed === gamesWon + gamesLost`
+    > holds for *every* game in the corpus, and if it does not, which games fall
+    > through the gap and whether that is intended.
 23. Soft-deleted games (`deletedAt` set) are excluded from every aggregate.
     Fuzz this specifically — §3.2.4 makes soft delete the only delete, so a fold
     that forgets the filter silently rewrites history and the money.
@@ -181,7 +212,9 @@ Do not open a PR that changes a rule. If the harness itself is worth keeping,
 propose it as a separate PR containing only
 `packages/core/src/wave3-properties.test.ts` and the `fast-check` devDependency.
 
-⚠️ Note that `packages/core` has coverage thresholds enforced in `npm test`.
-Adding a test file that exercises new branches can move coverage numbers; if CI
-goes red on thresholds rather than on a failing assertion, that is a CI
-configuration matter — **report it, do not adjust the thresholds.**
+⚠️ Note that `packages/core` has coverage thresholds enforced in `npm test`
+(**95%**, not the 100% §3.8's T1 row still claims — that mismatch is itself a
+small finding worth restating in your report). Adding a test file that exercises
+new branches can move coverage numbers; if CI goes red on thresholds rather than
+on a failing assertion, that is a CI configuration matter — **report it, do not
+adjust the thresholds.**

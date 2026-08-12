@@ -192,10 +192,13 @@ before the domain exists.
   2026-08-12). Still missing: the **gitleaks pre-commit hook** (§2.5). `.gitignore` is in place.
 - ✅ **The `DATABASE_URL` question is answered** (2026-08-12, second pass). meal-planner's live
   branch — `master`, **not** the stale `prepare-private-online-deployment` checked out at
-  `C:\dev\meal-planner` — has moved storage to Convex and **removed the SQLite fallback
-  entirely**; it now fails closed in production. The data-loss bug is fixed *provided Render
-  deploys master*, which is only visible in the Render dashboard. **Two worse problems were
-  found in its place — see §8.4 and the escalation list in §8.5.**
+  `C:\dev\meal-planner` — has added Convex storage plus a guard, `assertLocalSqliteAllowed()`,
+  that throws only when `NODE_ENV === "production"`. ⚠️ **The SQLite fallback is still present**:
+  `@libsql/client` remains a dependency and `kvGet`/`kvList`/`kvSet` each still have a live
+  SQLite branch, taken whenever the Convex URL is empty. So the **web** service is protected
+  (because `next start` sets `NODE_ENV=production`) and the **new cron service is not**. The
+  data-loss bug is narrowed, not eliminated — see §8.4. **Two worse problems were found
+  alongside it — see §8.5.**
 - ✅ **`burkert.app` is registered** — 2026-08-12 06:16 UTC, Cloudflare Registrar, Cloudflare
   nameservers, verified against Google Registry's RDAP. §7.7 step 1 is done; start from step 2.
 - 🔄 **§7 platform setup in flight as of 2026-08-12** — Zero Trust team, three Access Groups,
@@ -210,11 +213,15 @@ before the domain exists.
   `convex/` has schema plus 23 functions across 4 files; `apps/web` has all five screens plus
   the board scorer. **`apps/web` is not yet wired to Convex** — it runs off `fixtures.ts` and
   localStorage, deliberately, pending the migration.
-- ✅ **All 23 Convex functions call `assertAllowlisted` or `assertAdmin` as their literal first
-  statement.** There are no `action`, `internalMutation`, `internalQuery` or `httpAction`
-  exports, and no `http.ts` or `crons.ts`. Verified 2026-08-12. QA agent H would pass today —
-  which is the baseline it must be re-checked against after the migration, not a reason to skip
-  it.
+- ✅ **On branch `plan/remaining` as of 2026-08-12, all 23 Convex functions call
+  `assertAllowlisted` or `assertAdmin` as their literal first statement** (admin 5, games 10,
+  players 6, stats 2). No `action`, `internalMutation`, `internalQuery` or `httpAction` exports;
+  no `http.ts` or `crons.ts`. **Branch-qualified deliberately** — the migration branch is where
+  this surface is changing, so the claim goes stale the moment it lands.
+  > ⚠️ **This is not "QA agent H would pass today".** With `providers: []` (next bullet) every
+  > one of H's token attacks is refused for the same trivial reason, so they pass *vacuously*
+  > and prove nothing about AUD isolation. Only H's Task 1 enumeration is meaningfully
+  > exercisable right now. A real H run needs Access live.
 - ⚠️ **`auth.config.ts` emits `providers: []` when `CF_ACCESS_TEAM_DOMAIN` / `CF_ACCESS_AUD` are
   unset**, so `getUserIdentity()` returns null and all 23 functions throw. It fails **closed**,
   which is correct — but the app is entirely non-functional until both Convex env vars are set.

@@ -35,6 +35,10 @@ changed. Report what you achieve and what you fail to achieve.
    can destroy. Note that `games.softDelete` is soft (§3.2.4) but
    `admin.revoke` and `players.setActive` are not trivially reversible.
 - ✅ You may write throwaway attack scripts outside the repo.
+- ⚠️ **You are not concurrency-safe with agent I.** Task 1 calls every function
+  and Task 3 attempts real mutations, on the same shared Convex dev deployment
+  that I reconciles money against (§6.1). **Do not run at the same time as I** —
+  run after it, or against your own deployment.
 
 ## Baseline: what "guarded" looks like today
 
@@ -94,6 +98,19 @@ code review:
    check is a wide-open door and would not appear in a `query`/`mutation` audit.
 
 ## Task 2 — the token attacks
+
+> 🚨 **Read this before running Task 2, or you will produce a false pass.**
+> `convex/auth.config.ts` emits `providers: []` when `CF_ACCESS_TEAM_DOMAIN` or
+> `CF_ACCESS_AUD` is unset. **With no provider registered, every attack below is
+> refused for the same trivial reason** — there is nothing to validate a token
+> against, so `getUserIdentity()` returns null whatever you send. All ten rows go
+> green and **none of them has tested anything**, least of all 2.3, the cross-AUD
+> test this entire design rests on.
+>
+> **So check first: is a provider actually registered?** If not, **stop Task 2,
+> mark every row NOT TESTED, and state plainly that the deployment has no auth
+> provider configured.** That statement is the finding. Resume when Access is
+> live and both env vars are set.
 
 `convex/auth.config.ts` registers a `customJwt` provider with
 `issuer = CF_ACCESS_TEAM_DOMAIN`, `jwks = ${teamDomain}/cdn-cgi/access/certs`,
