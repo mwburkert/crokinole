@@ -147,18 +147,42 @@ function GameRow({
 
       {open ? (
         <div className="matchup__detail">
-          {unfinished ? (
+          {/*
+            Manage controls for *any* game, finished or not.
+             *
+             * They used to render only on an unfinished game, so a night that
+             * was already scored — the one where a wrong number actually costs
+             * somebody money — could not be corrected or removed from here at
+             * all. "Correct" goes to the play screen, which already knows how
+             * to page back through committed rounds and re-derive the standing
+             * from a correction, including un-finishing a finished game.
+             *
+             * `canManage` is the admin check. Under the shared passphrase that
+             * is everyone holding the code, because one secret cannot tell two
+             * people apart — see `convex/lib/auth.ts`. It narrows to the
+             * allowlist's admins the moment identities are real, with no change
+             * needed here.
+          */}
+          {canManage || unfinished ? (
             <div className="spread" style={{ marginBottom: "0.5rem" }}>
-              <Badge live>Unfinished</Badge>
-              {/* Abandoned games are only the business of the people who were in
-                  them — anyone else seeing a Delete button on someone else's
-                  night is an invitation to a mistake. */}
+              {unfinished ? <Badge live>Unfinished</Badge> : <span />}
               {canManage ? (
                 <span className="row" style={{ gap: "0.4rem" }}>
-                  <Link className="btn btn--accent" to={`/games/${game.id}/play`}>
-                    Resume
+                  <Link
+                    className="btn btn--accent"
+                    to={`/games/${game.id}/play`}
+                    // Ask for the scoreboard on arrival: correcting a finished
+                    // game otherwise opens on its end-of-game scorecard.
+                    state={unfinished ? undefined : { correct: true }}
+                  >
+                    {unfinished ? "Resume" : "Correct"}
                   </Link>
-                  <button type="button" className="btn btn--ghost" onClick={onDelete}>
+                  <button
+                    type="button"
+                    className="btn btn--ghost"
+                    onClick={onDelete}
+                    aria-label={`Delete the ${nameOf(game.teams.A.playerIds[0] ?? "")} game`}
+                  >
                     Delete
                   </button>
                 </span>

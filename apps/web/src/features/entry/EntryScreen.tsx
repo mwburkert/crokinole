@@ -14,7 +14,7 @@ import {
   type TeamKey,
 } from "@crokinole/core";
 import { useEffect, useState, type ReactNode } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 
 import { isPendingGameId, useStore } from "../../data/store";
 import { Card, Empty, Loading, Money } from "../../ui/components";
@@ -47,7 +47,14 @@ export function EntryScreen(): ReactNode {
   /** Set only when a round was typed in rather than placed. */
   const [manualCounts, setManualCounts] = useState<{ a: RingCounts; b: RingCounts } | null>(null);
   const [totals, setTotals] = useState<{ a: number; b: number } | null>(null);
-  const [showManual, setShowManual] = useState(false);
+  /*
+   * "Correct" from history routes here and asks for the scoreboard straight
+   * away. Without it, correcting a finished game meant landing on the
+   * end-of-game scorecard, dismissing it, then finding the ⊞ — three taps to
+   * reach the thing you had already said you wanted.
+   */
+  const correcting = (useLocation().state as { correct?: boolean } | null)?.correct === true;
+  const [showManual, setShowManual] = useState(correcting);
   const [confirming, setConfirming] = useState(false);
   /** Placement history for undo/redo. Rounds already committed use their own undo. */
   const [past, setPast] = useState<PlacedDisc[][]>([]);
@@ -55,7 +62,9 @@ export function EntryScreen(): ReactNode {
   /** Which round the scoreboard overlay is showing. `null` = the live one. */
   const [editing, setEditing] = useState<number | null>(null);
   /** The scorecard is the moment the match ends; the settlement follows it. */
-  const [cardDone, setCardDone] = useState(false);
+  const [cardDone, setCardDone] = useState(correcting);
+  /** One-shot: has the "correct this game" arrival been seeded onto a round yet? */
+  const [seededCorrection, setSeededCorrection] = useState(!correcting);
   /** Shown for a beat after each round so you see the match take shape. */
   const [showCard, setShowCard] = useState(false);
   /** Per-player twenties for the round in play. */
@@ -116,6 +125,18 @@ export function EntryScreen(): ReactNode {
   // a round can un-finish a finished game as easily as finish one. Nothing here
   // may latch "the match is over": this is the one flag that would, and it
   // stands back down the moment the standing says the game is live again.
+  /*
+   * Arriving to correct a finished game: land on its last round, not on the
+   * empty round after it. `editing === null` means "the round in play", and a
+   * finished game has none — so the sheet opened on "Round 5, in play" of a
+   * four-round game. One-shot, so paging back to the live round later still
+   * works on a game that gets un-finished by the correction.
+   */
+  if (!seededCorrection) {
+    setSeededCorrection(true);
+    if (game.rounds.length > 0) setEditing(game.rounds.length - 1);
+  }
+
   if (!standing.isComplete && cardDone) setCardDone(false);
   // …and the other way: a correction that *ends* the match hands the screen to
   // the scorecard, so the sheet that made it happen gets out of the way rather

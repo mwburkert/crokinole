@@ -9,10 +9,19 @@
   // Deploy from the repo root with `npm run deploy:cf` (see root package.json).
   // Relative paths below are resolved against THIS file's directory (apps/web),
   // not the directory wrangler is invoked from.
-  "$schema": "node_modules/wrangler/config-schema.json",
+  // wrangler is hoisted to the workspace root, hence the ../../ — this is only
+  // for editor autocomplete and has no effect on deploys.
+  "$schema": "../../node_modules/wrangler/config-schema.json",
 
   "name": "crokinole",
-  "compatibility_date": "2026-08-12",
+
+  // Matches the workerd build bundled with the pinned wrangler (workerd
+  // 1.20260811.1). Deliberately not "today": a compatibility_date newer than
+  // the installed runtime makes wrangler print a "not supported by the
+  // installed Cloudflare Workers Runtime" warning, which is noise nobody
+  // should have to interpret on their first deploy. Bump this together with
+  // the wrangler devDependency.
+  "compatibility_date": "2026-08-11",
 
   // No "main" key: this is an assets-only Worker. Cloudflare's docs state
   // plainly that "The `main` key is optional for assets-only Workers", and

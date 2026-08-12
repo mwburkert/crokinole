@@ -19,6 +19,7 @@
     "convex:dev": "convex dev",
     "convex:codegen": "convex codegen",
     "host:dev": "convex dev --once && npm run build && static-hosting upload --dist apps/web/dist",
+    "deploy:cf": "npm run build && wrangler deploy --config apps/web/wrangler.jsonc",
     "lint": "tsc -b --pretty false"
   },
   "devDependencies": {
@@ -26,7 +27,8 @@
     "@vitest/coverage-v8": "^3.2.7",
     "convex": "^1.17.4",
     "typescript": "^5.7.2",
-    "vitest": "^3.2.7"
+    "vitest": "^3.2.7",
+    "wrangler": "^4.122.0"
   },
   "dependencies": {
     "@convex-dev/static-hosting": "^0.2.1"

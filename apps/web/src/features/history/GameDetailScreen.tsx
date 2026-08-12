@@ -102,11 +102,19 @@ export function GameDetailScreen(): ReactNode {
         </Card>
       ) : null}
 
-      {game.status === "in_progress" ? (
-        <Link className="btn btn--accent btn--block btn--lg" to={`/games/${game.id}/play`}>
-          Resume entry
-        </Link>
-      ) : null}
+      {/*
+        The same destination either way — the play screen is where rounds are
+        entered *and* corrected. A finished game had no route back into it from
+        here, which meant the one screen showing a wrong number was the one
+        screen you could do nothing about.
+      */}
+      <Link
+        className="btn btn--accent btn--block btn--lg"
+        to={`/games/${game.id}/play`}
+        state={game.status === "in_progress" ? undefined : { correct: true }}
+      >
+        {game.status === "in_progress" ? "Resume entry" : "Correct a round"}
+      </Link>
 
       {confirming ? (
         <Card title="Delete this game?">
