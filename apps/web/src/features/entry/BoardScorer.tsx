@@ -92,9 +92,13 @@ export function BoardScorer({
   const [active, setActive] = useState<DiscColor>(colorA);
   const [drag, setDrag] = useState<Drag | null>(null);
   const [hover, setHover] = useState<Region | null>(null);
-  const [flash, setFlash] = useState<{ id: number; text: string; x: number; y: number } | null>(
-    null,
-  );
+  const [flash, setFlash] = useState<{
+    id: number;
+    text: string;
+    x: number;
+    y: number;
+    kind: "points" | "gutter" | "twenty";
+  } | null>(null);
 
   const svgRef = useRef<SVGSVGElement | null>(null);
   const holdTimer = useRef<number | null>(null);
@@ -122,14 +126,23 @@ export function BoardScorer({
     }
   };
 
-  const showFlash = (points: number, x: number, y: number): void => {
-    if (points <= 0) return;
+  /** A twenty is the moment of the round, so it gets the loudest treatment. */
+  const showFlash = (region: Region, x: number, y: number): void => {
+    const points = pointsFor(region);
     flashId.current += 1;
     const id = flashId.current;
-    setFlash({ id, text: `+${points}`, x, y });
-    window.setTimeout(() => {
-      setFlash((current) => (current?.id === id ? null : current));
-    }, 700);
+
+    const kind = region === "twenty" ? "twenty" : region === "ditch" ? "gutter" : "points";
+    const text = region === "ditch" ? "Gutter!" : `+${points}`;
+    // Centre the twenty on the board rather than on the disc — it's an event,
+    // not an annotation.
+    const at = region === "twenty" ? { x: BOARD_CENTRE, y: BOARD_CENTRE + BOARD_TOP } : { x, y };
+
+    setFlash({ id, text, kind, ...at });
+    window.setTimeout(
+      () => setFlash((current) => (current?.id === id ? null : current)),
+      region === "twenty" ? 1600 : 750,
+    );
   };
 
   const pointsFor = (region: Region): number =>
@@ -140,6 +153,11 @@ export function BoardScorer({
     if (!point) return;
     event.currentTarget.setPointerCapture?.(event.pointerId);
     pending.current = { source, x: point.x, y: point.y, color };
+
+    // Touching a pile or stash selects that colour immediately — the same
+    // gesture that starts a drag also sets the toggle, so there is never a
+    // tap-then-hold.
+    if (source.kind === "pile" || source.kind === "stash") setActive(color);
 
     cancelHold();
     holdTimer.current = window.setTimeout(() => {
@@ -200,7 +218,7 @@ export function BoardScorer({
       if (!placed) return;
       onChange([...discs, placed]);
       const view = toView(placed.x, placed.y);
-      showFlash(pointsFor(placed.region), view.x, view.y);
+      showFlash(placed.region, view.x, view.y);
       return;
     }
 
@@ -228,7 +246,7 @@ export function BoardScorer({
       // Only flash when it actually changed what it's worth.
       if (before && before.region !== region) {
         const view = toView(snapped.x, snapped.y);
-        showFlash(pointsFor(region), view.x, view.y);
+        showFlash(region, view.x, view.y);
       }
       return;
     }
@@ -239,7 +257,7 @@ export function BoardScorer({
       { id: nextId(), color: drag.color, x: snapped.x, y: snapped.y, region },
     ]);
     const view = toView(snapped.x, snapped.y);
-    showFlash(pointsFor(region), view.x, view.y);
+    showFlash(region, view.x, view.y);
   };
 
   const twentiesOf = (color: DiscColor): number =>
@@ -263,9 +281,10 @@ export function BoardScorer({
       >
         <BoardArt hover={hover} />
 
-        {/* Stashes — one per team, inboard of their score. */}
-        <Stash x={62} color={colorA} count={twentiesOf(colorA)} onDown={handleDown} />
-        <Stash x={138} color={colorB} count={twentiesOf(colorB)} onDown={handleDown} />
+        {/* Twenties, laid out in a row directly under each score card so the
+            two sides read at a glance without anyone counting a number. */}
+        <Stash x={16} color={colorA} count={twentiesOf(colorA)} onDown={handleDown} />
+        <Stash x={184} color={colorB} count={twentiesOf(colorB)} onDown={handleDown} rightAligned />
 
         {/* One pile per colour: tap selects, hold-and-drag takes a disc. */}
         {PILES.map((pile, index) => {
@@ -296,7 +315,7 @@ export function BoardScorer({
               key={disc.id}
               cx={view.x}
               cy={view.y}
-              r={isDragging ? DISC_RADIUS * 1.35 : isActive ? DISC_RADIUS : DISC_RADIUS * 0.82}
+              r={isDragging ? DISC_RADIUS * 1.5 : isActive ? DISC_RADIUS * 1.15 : DISC_RADIUS * 0.75}
               className={`scorer__disc scorer__disc--${disc.color}${isDragging ? " is-dragging" : ""}`}
               opacity={isDragging ? 0.55 : isActive ? 1 : 0.5}
               style={{ pointerEvents: isActive ? "auto" : "none" }}
@@ -319,7 +338,12 @@ export function BoardScorer({
         ) : null}
 
         {flash ? (
-          <text key={flash.id} x={flash.x} y={flash.y} className="scorer__flash">
+          <text
+            key={flash.id}
+            x={flash.x}
+            y={flash.y}
+            className={`scorer__flash scorer__flash--${flash.kind}`}
+          >
             {flash.text}
           </text>
         ) : null}
@@ -412,26 +436,45 @@ function Pile({
   );
 }
 
+/** Sunk twenties, drawn as a row of discs rather than a tally. */
 function Stash({
   x,
   color,
   count,
   onDown,
+  rightAligned = false,
 }: {
   x: number;
   color: DiscColor;
   count: number;
   onDown: (event: PointerEvent, source: Source, color: DiscColor) => void;
+  rightAligned?: boolean;
 }): ReactNode {
+  const step = DISC_RADIUS * 1.7;
   return (
     <g
       className="scorer__stash"
       onPointerDown={(event) => onDown(event, { kind: "stash", color }, color)}
+      aria-label={`${count} twenties`}
     >
-      <circle cx={x} cy={20} r={DISC_RADIUS + 1} className={`scorer__disc scorer__disc--${color}`} />
-      <text x={x + 13} y={24} className="scorer__stashcount">
-        ×{count}
-      </text>
+      {/* An always-present slot so the row is findable when it's empty. */}
+      <rect
+        x={rightAligned ? x - 6 * step - 3 : x - 3}
+        y={12}
+        width={6 * step + 6}
+        height={16}
+        rx={8}
+        className="scorer__stashslot"
+      />
+      {Array.from({ length: count }, (_, index) => (
+        <circle
+          key={index}
+          cx={rightAligned ? x - index * step : x + index * step}
+          cy={20}
+          r={DISC_RADIUS * 0.85}
+          className={`scorer__disc scorer__disc--${color}`}
+        />
+      ))}
     </g>
   );
 }

@@ -1258,3 +1258,91 @@
 .scorer__pile.is-selected .scorer__pilering {
   stroke: var(--accent);
 }
+
+/* ── Round entry: score header, overlay, flashes ─────────────────────────── */
+
+/* No scrollbar anywhere — this is a phone app pretending to be native. */
+html { scrollbar-width: none; }
+::-webkit-scrollbar { width: 0; height: 0; display: none; }
+
+.scorebtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 2px auto 0;
+  border: 0;
+  background: none;
+  color: var(--ink-faint);
+  cursor: pointer;
+  min-height: 1.75rem;
+  padding: 0;
+}
+
+.scorebtn[aria-expanded="true"] { color: var(--accent); }
+
+.matchscore {
+  text-align: center;
+  margin: 0.35rem 0 0;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--ink-faint);
+  letter-spacing: 0.03em;
+}
+
+.matchscore__dash { padding: 0 2px; }
+.matchscore__to { font-weight: 500; }
+
+/* The scoreboard floats over the board so nothing beneath it moves. */
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--gap);
+  background: rgb(0 0 0 / 0.45);
+}
+
+.overlay__sheet {
+  width: 100%;
+  max-width: 24rem;
+  max-height: 85vh;
+  overflow-y: auto;
+  background: var(--bg-raised);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: var(--gap);
+  box-shadow: var(--shadow);
+}
+
+/* Flash colours: points green, gutter red, a twenty is the event of the round. */
+.scorer__flash--points { fill: var(--positive); }
+.scorer__flash--gutter { fill: var(--negative); }
+
+.scorer__flash--twenty {
+  font-size: 34px;
+  animation: twenty-pop 1600ms ease-out forwards, rainbow 900ms linear infinite;
+}
+
+@keyframes twenty-pop {
+  0% { opacity: 0; transform: scale(0.6); }
+  18% { opacity: 1; transform: scale(1.25); }
+  70% { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(1.05) translateY(-10px); }
+}
+
+@keyframes rainbow {
+  0% { fill: #e0473a; }
+  25% { fill: #e0a13a; }
+  50% { fill: #3ba85e; }
+  75% { fill: #3a76e0; }
+  100% { fill: #e0473a; }
+}
+
+.scorer__stashslot {
+  fill: color-mix(in srgb, var(--ink) 7%, transparent);
+}
+
+/* The gutter has to be unmistakable — it's the one drop that scores nothing. */
+.scorer__ring.is-hover { filter: brightness(1.15) saturate(1.2); }

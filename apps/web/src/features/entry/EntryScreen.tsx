@@ -30,7 +30,7 @@ import { ManualEntry } from "./ManualEntry";
 export function EntryScreen(): ReactNode {
   const { gameId } = useParams();
   const navigate = useNavigate();
-  const { getGame, addRound, removeLastRound, players } = useStore();
+  const { getGame, addRound, players } = useStore();
 
   /** Positions are the source of truth; counts are derived from them (§3.5). */
   const [discs, setDiscs] = useState<PlacedDisc[]>([]);
@@ -39,6 +39,9 @@ export function EntryScreen(): ReactNode {
   const [totals, setTotals] = useState<{ a: number; b: number } | null>(null);
   const [showManual, setShowManual] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  /** Placement history for undo/redo. Rounds already committed use their own undo. */
+  const [past, setPast] = useState<PlacedDisc[][]>([]);
+  const [future, setFuture] = useState<PlacedDisc[][]>([]);
 
   const game = gameId ? getGame(gameId) : undefined;
   if (!game) return <p className="empty">That game is gone.</p>;
@@ -63,7 +66,35 @@ export function EntryScreen(): ReactNode {
   const complete = manualCounts !== null || totals !== null || placementComplete(discs, budget);
   const stillToPlace = left.black + left.white;
 
+  const apply = (next: PlacedDisc[]): void => {
+    setPast((stack) => [...stack, discs]);
+    setFuture([]);
+    setDiscs(next);
+  };
+
+  const undo = (): void => {
+    setPast((stack) => {
+      const previous = stack.at(-1);
+      if (!previous) return stack;
+      setFuture((ahead) => [discs, ...ahead]);
+      setDiscs(previous);
+      return stack.slice(0, -1);
+    });
+  };
+
+  const redo = (): void => {
+    setFuture((stack) => {
+      const next = stack[0];
+      if (!next) return stack;
+      setPast((behind) => [...behind, discs]);
+      setDiscs(next);
+      return stack.slice(1);
+    });
+  };
+
   const reset = (): void => {
+    setPast([]);
+    setFuture([]);
     setDiscs([]);
     setManualCounts(null);
     setTotals(null);
@@ -128,32 +159,43 @@ export function EntryScreen(): ReactNode {
 
   return (
     <div>
+      {/* The round score leads — it's what people call out mid-round. The match
+          score is context, so it sits underneath in subtext. */}
       <div className="scoreline">
         <div className={`scoreline__side scoreline__side--${colorA}`}>
-          <span className="scoreline__mp num">{standing.matchPoints.A}</span>
+          <span className="scoreline__mp num">{pending.aPoints}</span>
         </div>
         <div className="scoreline__label">
-          to {cfg.targetMatchPoints}
-          <br />
           round {game.rounds.length + 1}
           <button
             type="button"
-            className="infobtn"
-            aria-label="Manual scoring"
+            className="scorebtn"
+            aria-label="Scoreboard and manual scoring"
             aria-expanded={showManual}
             onClick={() => setShowManual((current) => !current)}
-            style={{ justifyContent: "center", minHeight: "1.5rem" }}
           >
-            ⋯
+            <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+              <rect x="2" y="3" width="20" height="18" rx="3" fill="none" stroke="currentColor" strokeWidth="2" />
+              <line x1="12" y1="3" x2="12" y2="21" stroke="currentColor" strokeWidth="2" />
+              <line x1="2" y1="9" x2="22" y2="9" stroke="currentColor" strokeWidth="2" />
+            </svg>
           </button>
         </div>
         <div className={`scoreline__side scoreline__side--right scoreline__side--${colorB}`}>
-          <span className="scoreline__mp num">{standing.matchPoints.B}</span>
+          <span className="scoreline__mp num">{pending.bPoints}</span>
         </div>
       </div>
 
+      <p className="matchscore">
+        Match Score: <span className="num">{standing.matchPoints.A}</span>
+        <span className="matchscore__dash">–</span>
+        <span className="num">{standing.matchPoints.B}</span>
+        <span className="matchscore__to"> to {cfg.targetMatchPoints}</span>
+      </p>
+
       {showManual ? (
-        <Card>
+        <div className="overlay" role="dialog" aria-label="Scoreboard">
+          <div className="overlay__sheet">
           <ManualEntry
             config={cfg}
             a={a}
@@ -173,12 +215,15 @@ export function EntryScreen(): ReactNode {
             }}
             onClose={() => setShowManual(false)}
           />
-        </Card>
-      ) : (
+          </div>
+        </div>
+      ) : null}
+
+      {(
         <BoardScorer
           discs={discs}
           onChange={(next) => {
-            setDiscs(next);
+            apply(next);
             // Touching the board makes it authoritative again.
             setManualCounts(null);
             setTotals(null);
@@ -224,7 +269,7 @@ export function EntryScreen(): ReactNode {
           className="btn btn--accent btn--block btn--lg"
           onClick={commit}
         >
-          Commit round
+          Finish round
           {pending.result !== "tie"
             ? ` · ${sideName(pending.result)} +${cfg.matchPointsWin}`
             : ` · ${cfg.matchPointsTie} each`}
@@ -238,10 +283,20 @@ export function EntryScreen(): ReactNode {
         <button
           type="button"
           className="btn btn--ghost"
-          disabled={game.rounds.length === 0}
-          onClick={() => gameId && removeLastRound(gameId)}
+          aria-label="Undo"
+          disabled={past.length === 0}
+          onClick={undo}
         >
-          Undo last round
+          ↶
+        </button>
+        <button
+          type="button"
+          className="btn btn--ghost"
+          aria-label="Redo"
+          disabled={future.length === 0}
+          onClick={redo}
+        >
+          ↷
         </button>
         <button type="button" className="btn btn--ghost" onClick={() => navigate("/games")}>
           Finish later
