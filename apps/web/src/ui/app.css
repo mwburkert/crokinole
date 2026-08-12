@@ -1566,7 +1566,9 @@ html { scrollbar-width: none; }
 .boardbtn__plus {
   stroke: var(--twenty);
   stroke-width: 6;
-  stroke-linecap: round;
+  /* Butt caps, not round — a square-ended cross reads as a deliberate mark on
+     the board rather than a soft icon floating over it. */
+  stroke-linecap: butt;
   fill: none;
   opacity: 0.55;
 }

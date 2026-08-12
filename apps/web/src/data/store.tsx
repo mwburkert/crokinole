@@ -93,8 +93,48 @@ const StoreContext = createContext<StoreValue | null>(null);
 
 let nextId = 1000;
 
+/**
+ * ⚠️ TEMPORARY — survives a reload so the app is testable on a real phone.
+ *
+ * This is NOT the persistence design. Convex is the store (§6.2); this exists
+ * only because the wiring isn't done and games vanishing on every refresh made
+ * it impossible to play a night through. Delete this whole mechanism when
+ * `store.tsx` moves onto Convex — do not build on it.
+ */
+const SAVE_KEY = "crokinole:games:v1";
+
+function loadGames(): GameWithRounds[] {
+  try {
+    const raw = window.localStorage.getItem(SAVE_KEY);
+    if (!raw) return [...GAMES];
+    const parsed = JSON.parse(raw) as GameWithRounds[];
+    // Seed data is re-merged by id so a fixtures change still lands, and so a
+    // corrupt save can't wipe the real recorded night.
+    const saved = new Map(parsed.map((game) => [game.id, game]));
+    for (const game of GAMES) if (!saved.has(game.id)) saved.set(game.id, game);
+    return [...saved.values()];
+  } catch {
+    return [...GAMES];
+  }
+}
+
 export function StoreProvider({ children }: { children: ReactNode }): ReactNode {
-  const [games, setGames] = useState<GameWithRounds[]>(() => [...GAMES]);
+  const [games, setGamesRaw] = useState<GameWithRounds[]>(loadGames);
+
+  const setGames = useCallback(
+    (update: (current: GameWithRounds[]) => GameWithRounds[]): void => {
+      setGamesRaw((current) => {
+        const next = update(current);
+        try {
+          window.localStorage.setItem(SAVE_KEY, JSON.stringify(next));
+        } catch {
+          // Quota or private mode — the session still works, it just won't survive.
+        }
+        return next;
+      });
+    },
+    [],
+  );
   const [members, setMembers] = useState<Member[]>(() => [...MEMBERS]);
   const [players, setPlayers] = useState<Player[]>(() => [...PLAYERS]);
 
