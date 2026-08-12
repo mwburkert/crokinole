@@ -546,7 +546,7 @@ back stays trivial.
 
 ---
 
-## 7.10 Invitations — researched 2026-08-12 (second pass)
+## 7.9 Invitations — researched 2026-08-12 (second pass)
 
 Both routes were verified. Both are unblocked now that `burkert.app` exists.
 
@@ -583,7 +583,7 @@ on whether guest play matters** — see `09-HANDOFF-OH-HECK.md`.
 
 ---
 
-## 7.9 Verification status — rewritten 2026-08-12 (second pass)
+## 7.10 Verification status — rewritten 2026-08-12 (second pass)
 
 ### Resolved since the last pass
 
@@ -608,7 +608,7 @@ on whether guest play matters** — see `09-HANDOFF-OH-HECK.md`.
   `customJwt` path (§7.1a). Docs guarantee only `subject`/`issuer`/`tokenIdentifier`. **This one
   gates the whole auth design working at all** — test it the first time a real token lands.
 - **Whether External Evaluation is available on the Free plan.** The policy type exists and its
-  contract is exactly as §Invitations describes, but Cloudflare publishes no plan-availability
+  contract is exactly as §7.9 describes, but Cloudflare publishes no plan-availability
   statement either way. **Do not treat "no documented restriction" as "confirmed available"** —
   check in the dashboard before designing the invitation flow around it.
 - **Whether changing `CF_ACCESS_TEAM_DOMAIN` / `CF_ACCESS_AUD` re-evaluates `auth.config.ts`**

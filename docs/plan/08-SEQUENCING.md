@@ -25,7 +25,7 @@ domain.
 | Zero Trust team, IdP, Groups, Access applications | **Unblocked** — owner, ~1 hour |
 | `auth.config.ts` wiring, AUD tags | **Unblocked**, but needs the AUDs from the step above |
 | Retiring the interim passcode | **Unblocked**, gated on Access being live |
-| Invitations (Access Group API or External Evaluation) | **Unblocked** — §7.10 |
+| Invitations (Access Group API or External Evaluation) | **Unblocked** — §7.9 |
 | Resend + verified sending domain | **Unblocked** — §7.6 |
 | `meals.burkert.app` cutover | **Unblocked**, but see §8.4 — it has grown new problems |
 
@@ -85,7 +85,7 @@ prerequisite.
 | 9 | `auth.config.ts` + `/admin/token` Worker + Workers deploy (§7.5a) | agent | ~½d | 7, migration |
 | 10 | **Verify `identity.email` actually arrives** (§7.1a) | agent | 30 min | 9 |
 | 11 | Retire the interim passcode (§Retire the passcode) | agent | 1h | 9, 10, coordinate with migration agent |
-| 12 | Invitations — Route A, Access Group API (§7.10) | agent | ~½d | 6, 7 |
+| 12 | Invitations — Route A, Access Group API (§7.9) | agent | ~½d | 6, 7 |
 | 13 | Resend + verified sending domain for invite email | owner + agent | 1h | 6 |
 
 ### Tier 3 — later, deliberately
@@ -240,7 +240,7 @@ Ordered by urgency.
    disables *every project on the team*. All three apps on one free team means a
    runaway crokinole takes meal-planner down. Accept, or split the teams.
 9. **Check External Evaluation availability on Free** in the Zero Trust
-   dashboard before designing the invitation flow around it (§7.10).
+   dashboard before designing the invitation flow around it (§7.9).
 
 ---
 
