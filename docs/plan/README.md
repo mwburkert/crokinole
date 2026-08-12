@@ -18,6 +18,7 @@ in-place.
 | [06-ORCHESTRATION.md](06-ORCHESTRATION.md) | Running parallel agents on this without collisions | ready |
 | [07-PLATFORM.md](07-PLATFORM.md) | `burkert.app` — one domain, one login, three apps, ~$14/yr | ready |
 | **[08-SEQUENCING.md](08-SEQUENCING.md)** | **What's left, in order. Dependencies, effort, owner-vs-agent, escalations.** | ⬅️ **new 2026-08-12** |
+| **[09-TABLES.md](09-TABLES.md)** | **Host/join tables — concurrent games, guest seats, per-table edit rights, spectators.** A direction change, not a feature. | 🆕 **design note, blocked** |
 | [../qa/](../qa/) | Wave 3 QA briefs — G (rules fuzz), H (auth/security), I (reconciliation) | ready to fire |
 
 ---
@@ -156,8 +157,20 @@ all decisions closed (00-DECISIONS.md)
                                                  │
                             ship, use for a month
                                                  │
-                            §4.6 re-review ─► Phase 2
+                            §4.6 re-review ─┬─► Phase 2  (§4, additive)
+                                            │
+                                            └─► §9 TABLES  (direction change)
+                                                  needs §7 Access live,
+                                                  the migration landed,
+                                                  and §9.10 answered
+                                                        │
+                                                        └─► composes with
+                                                            §5.3 camera per table
 ```
+
+**§9 is deliberately drawn off the re-review, not off Phase 2.** It is not an
+additive feature — it changes what the app's core model *is*, and it should be
+weighed against §4 rather than scheduled after it.
 
 **T0 (scaffold) and T1 (the rules engine) depend on none of it.** `packages/core` is pure
 TypeScript with no dependencies and is the critical path for everything else, so it can start

@@ -190,6 +190,14 @@ export default defineSchema({
 > *reasoning* below it still holds, but **`convex/schema.ts` is the source of truth** and it has
 > since gained: `rounds.discs` (the board scorer's stored positions, §3.5), `rounds.resultOverride`
 > (outcome known, points never recorded — how the 5 Aug night is stored), and `config.winBy`.
+>
+> **And `players.authUserId` no longer exists.** The real field is
+> `authSubject: v.optional(v.string())`, indexed as `by_auth` — `v.id("users")` assumed a Convex
+> Auth `users` table this app does not have. The identity is a Cloudflare Access JWT `subject`
+> **string**, not a document id. §3.6's "Players ≠ users" paragraph still names the old field;
+> the *principle* is unchanged and now load-bearing in a new place — a `players` row can exist
+> with no login and no email at all, which is exactly what §9's guest seats depend on.
+>
 > Read the real file before designing against this.
 
 **Why counts and not totals.** Entering `{twenties: 1, fifteens: 2, tens: 1}` instead of `60`

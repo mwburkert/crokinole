@@ -73,6 +73,7 @@ prerequisite.
 | 2 | **Make `ci` a required status check** on the `main` ruleset | agent | 10 min | nothing — see §8.3 |
 | 3 | Add the gitleaks pre-commit hook (§2.5) | agent | 20 min | nothing |
 | 4 | Fix the stale `gh auth refresh -u` claim in `README.md` | agent | 5 min | done in this PR |
+| 5 | **Two `convex/games.ts` bugs found by the §9 audit** — see [§9.12](09-TABLES.md#912-bugs-found-while-auditing-this--reported-not-fixed) | **migration agent** | ~30 min | Hand to whoever owns `convex/` this wave. `removeLastRound` never re-derives completion and can leave a phantom `in_progress` game; `setNotes` checks neither existence nor `deletedAt` |
 
 ⚠️ **"Add `convex/` to the root `tsc -b`" is deliberately NOT in this tier**, though
 it looks like it belongs. CI would have to run `convex codegen` before typechecking
@@ -101,7 +102,8 @@ deploy key and add it as a repo secret first. It sits in Tier 2 as item 9a.
 |---|---|---|---|---|
 | 14 | T7: seed remaining historical games | **owner** | — | Only the 5 Aug night is in. **Never backfill invented points** |
 | 15 | Phase 2 (§4) | — | — | Not until Phase 1 has had a month of real use and §4.6 is answered from actual play |
-| 16 | Phase 3 camera scoring (§5) | — | — | Exploratory. §5.6 has the cheapest first experiment |
+| 16 | **Tables — the host/join model (§9)** | — | ~6d + design | 🆕 **A direction change, not a feature.** Blocked on §7 Access being live, on the migration landing, and on the owner answering §9.10's twelve open questions |
+| 17 | Phase 3 camera scoring (§5) | — | — | Exploratory. §5.6 has the cheapest first experiment. **Composes with §9** — a table is a board is a camera (§9.8) |
 
 ---
 

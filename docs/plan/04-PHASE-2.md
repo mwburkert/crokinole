@@ -7,6 +7,17 @@ Everything here is additive. Because Phase 1 stores raw ring counts, per-player 
 snapshotted config, **none of it requires a schema migration** — only new UI and new derived
 queries.
 
+> ⚠️ **That additive claim does not extend to [§9 Tables](09-TABLES.md) — added 2026-08-12.**
+> The owner has since described a **host/join tables model** (multiple concurrent games, guest
+> seats, per-table edit permission, spectators). It is a **direction change, not a Phase 2
+> item**: it makes plural three things Phase 1 treats as singletons — "who is here", "the live
+> game", and "one trust level" — and it does require schema work. It is written up separately
+> in §9 precisely so it is not mistaken for one of the additive items below.
+>
+> Two items in §4.5 interact with it directly: **#2 night grouping** (already built — see the
+> note there) and **#3 running tab**, whose settlement unit becomes ambiguous once several
+> tables run at once (§9.10 Q3). Answer §9.10 before building either.
+
 ---
 
 ## 4.1 Extended shot tracking
