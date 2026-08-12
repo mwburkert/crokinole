@@ -1,8 +1,15 @@
-import type { DiscColor, Format } from "@crokinole/core";
+import {
+  currentNightKey,
+  gamesOnNight,
+  shuffle,
+  suggestSeating,
+  type DiscColor,
+  type Format,
+} from "@crokinole/core";
 import { useMemo, useState, type ReactNode } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
-import { useStore } from "../../data/store";
+import { useStore, useVisibleGames } from "../../data/store";
 import { Card, SegmentedControl } from "../../ui/components";
 import { Board } from "./Board";
 
@@ -26,9 +33,15 @@ const DOUBLES_SEATS: SeatKey[] = ["top", "right", "bottom", "left"];
 const SINGLES_SEATS: SeatKey[] = ["top", "bottom"];
 
 export function NewGameScreen(): ReactNode {
-  const { players, createGame } = useStore();
+  const { availablePlayers, createGame } = useStore();
+  const allGames = useVisibleGames();
   const navigate = useNavigate();
   const [params] = useSearchParams();
+
+  const tonightGames = useMemo(
+    () => gamesOnNight(allGames, currentNightKey()),
+    [allGames],
+  );
 
   const [format, setFormat] = useState<Format>(() =>
     params.get("format") === "singles" ? "singles" : "doubles",
@@ -93,15 +106,47 @@ export function NewGameScreen(): ReactNode {
     navigate(`/games/${id}/play`);
   };
 
+  /** Re-seat the people already chosen, without changing who's playing. */
+  const reshuffleSeats = (): void => {
+    const seated = activeSeats.map((seat) => seats[seat]).filter(Boolean);
+    if (seated.length < activeSeats.length) return;
+    const mixed = shuffle(seated);
+    setSeats((current) => {
+      const next = { ...current };
+      activeSeats.forEach((seat, i) => {
+        next[seat] = mixed[i] ?? "";
+      });
+      return next;
+    });
+  };
+
+  /** Pick a whole new four, favouring partnerships that haven't happened tonight. */
+  const suggest = (): void => {
+    const seating = suggestSeating(
+      availablePlayers.map((player) => player.id),
+      tonightGames,
+      format,
+    );
+    if (!seating) return;
+    setSeats(
+      singles
+        ? { top: seating.teamA[0] ?? "", bottom: seating.teamB[0] ?? "", left: "", right: "" }
+        : {
+            top: seating.teamA[0] ?? "",
+            bottom: seating.teamA[1] ?? "",
+            right: seating.teamB[0] ?? "",
+            left: seating.teamB[1] ?? "",
+          },
+    );
+  };
+
   const seatControl = (seat: SeatKey): ReactNode => {
     const isSideSeat = seat === "left" || seat === "right";
-    const color = singles ? (seat === "top" ? topColor : sideColor) : isSideSeat ? sideColor : topColor;
     return (
       <div className={`seat seat--${seat}`} key={seat}>
-        <span className="seat__label">
-          <span className={`disc disc--${color}`} aria-hidden="true" />
-          {seatName(seat, singles)}
-        </span>
+        {/* No seat label — the discs drawn on the board say which side is which,
+            and the labels were the difference between fitting on an iPhone 15
+            and not. */}
         <select
           className={`seat__select${seats[seat] ? "" : " seat__select--empty"}`}
           value={seats[seat]}
@@ -109,17 +154,15 @@ export function NewGameScreen(): ReactNode {
           aria-label={`${seatName(seat, singles)} player`}
         >
           <option value="">{isSideSeat ? "Pick" : "Choose…"}</option>
-          {players
-            .filter((player) => player.isActive)
-            .map((player) => (
-              <option
-                key={player.id}
-                value={player.id}
-                disabled={taken.has(player.id) && seats[seat] !== player.id}
-              >
-                {player.displayName}
-              </option>
-            ))}
+          {availablePlayers.map((player) => (
+            <option
+              key={player.id}
+              value={player.id}
+              disabled={taken.has(player.id) && seats[seat] !== player.id}
+            >
+              {player.displayName}
+            </option>
+          ))}
         </select>
       </div>
     );
@@ -139,7 +182,7 @@ export function NewGameScreen(): ReactNode {
         />
       </Card>
 
-      <Card title={singles ? "Who's playing" : "Round the board — partners sit opposite"}>
+      <Card>
         <div className={`table-layout${singles ? " table-layout--singles" : ""}`}>
           {seatControl("top")}
           {singles ? null : seatControl("left")}
@@ -150,19 +193,53 @@ export function NewGameScreen(): ReactNode {
           {seatControl("bottom")}
         </div>
 
-        <button
-          type="button"
-          className="btn btn--ghost btn--block"
-          style={{ marginTop: "var(--gap)" }}
-          onClick={() => setTopIsBlack((current) => !current)}
-        >
-          Flip colours
-        </button>
+        <div className="tools">
+          <button
+            type="button"
+            className="tools__btn"
+            onClick={() => setTopIsBlack((current) => !current)}
+            title="Flip colours"
+            aria-label="Flip colours"
+          >
+            <span className="tools__glyph" aria-hidden="true">
+              <span className="disc disc--black" />
+              <span className="disc disc--white" />
+            </span>
+            Colours
+          </button>
+          <button
+            type="button"
+            className="tools__btn"
+            onClick={reshuffleSeats}
+            disabled={!ready}
+            title="Same players, new seats"
+            aria-label="Shuffle the seating of the current players"
+          >
+            <span className="tools__glyph" aria-hidden="true">
+              ⇄
+            </span>
+            Re-seat
+          </button>
+          <button
+            type="button"
+            className="tools__btn"
+            onClick={suggest}
+            disabled={availablePlayers.length < (singles ? 2 : 4)}
+            title="New pairing, favouring partners who haven't played together tonight"
+            aria-label="Suggest a pairing that hasn't happened tonight"
+          >
+            <span className="tools__glyph" aria-hidden="true">
+              ⤮
+            </span>
+            Mix up
+          </button>
+        </div>
       </Card>
 
-      <Card title="Bet">
+      <Card>
         <div className="bet-row">
-          <span style={{ fontSize: "1.5rem", fontWeight: 700 }}>$</span>
+          <span className="bet-row__label">Bet</span>
+          <span style={{ fontSize: "1.35rem", fontWeight: 700 }}>$</span>
           <input
             className="bet-row__input"
             inputMode="decimal"

@@ -9,6 +9,7 @@
  * rewrite history (§3.2.3).
  */
 
+import { nightKey } from "./night.js";
 import { gameStanding, otherTeam, teamOf } from "./scoring.js";
 import { settle } from "./settle.js";
 import type { GameWithRounds, PlayerId, PlayerStats, TeamKey } from "./types.js";
@@ -149,13 +150,17 @@ export function netCentsFor(games: GameWithRounds[], playerId: PlayerId): number
 
 /**
  * Group games into nights (§4.5.2 calls this the natural unit — five games in
- * an evening). Keyed by local calendar date, newest night first.
+ * an evening). Newest night first.
+ *
+ * Uses `nightKey`, not the calendar date: a game logged at 1am belongs to the
+ * night that started the evening before, so a late finish doesn't split one
+ * night across two rows.
  */
 export function groupByNight(games: GameWithRounds[]): { date: string; games: GameWithRounds[] }[] {
   const nights = new Map<string, GameWithRounds[]>();
   for (const game of games) {
     if (game.deletedAt !== undefined) continue;
-    const key = toLocalDateKey(game.playedAt);
+    const key = nightKey(game.playedAt);
     const bucket = nights.get(key);
     if (bucket) bucket.push(game);
     else nights.set(key, [game]);

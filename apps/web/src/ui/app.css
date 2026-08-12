@@ -62,6 +62,50 @@
   justify-content: flex-end;
 }
 
+/* ── Night pagination ────────────────────────────────────────────────────── */
+
+.daynav {
+  display: grid;
+  grid-template-columns: var(--tap) 1fr var(--tap);
+  align-items: center;
+  gap: var(--gap-sm);
+}
+
+.daynav__btn {
+  min-height: var(--tap);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg-raised);
+  color: var(--ink);
+  font-size: 1.4rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.daynav__btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.daynav__label {
+  text-align: center;
+  font-weight: 700;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
+}
+
+.daynav__sub {
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: var(--ink-faint);
+}
+
+/* Not-here players sit back rather than disappearing, so the list stays stable. */
+.chip[aria-pressed="false"] {
+  opacity: 0.45;
+}
+
 /* ── Board seating (new game) ────────────────────────────────────────────── */
 
 /*
@@ -147,11 +191,64 @@
   font-size: 0.62rem;
 }
 
+/* Three icon buttons under the board: colours, re-seat, mix up. */
+.tools {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--gap-sm);
+  margin-top: var(--gap-sm);
+}
+
+.tools__btn {
+  min-height: var(--tap);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  padding: 0.3rem 0.2rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--ink);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.tools__btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.tools__btn:active:not(:disabled) {
+  background: var(--felt);
+  color: var(--disc-white);
+}
+
+.tools__glyph {
+  font-size: 1.1rem;
+  line-height: 1.1;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
 .bet-row {
   display: grid;
-  grid-template-columns: auto 1fr;
+  grid-template-columns: auto auto 1fr;
   align-items: center;
   gap: var(--gap-sm);
+}
+
+.bet-row__label {
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
 }
 
 .bet-row__input {

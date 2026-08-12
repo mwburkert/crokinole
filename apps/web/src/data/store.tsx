@@ -15,6 +15,7 @@
 import {
   aggregateStats,
   configFor,
+  currentNightKey,
   gameStanding,
   groupByNight,
   settle,
@@ -54,6 +55,16 @@ interface StoreValue {
   softDelete: (gameId: string) => void;
   getGame: (gameId: string) => GameWithRounds | undefined;
 
+  /**
+   * Who is physically at the table tonight. Starts empty — everyone is greyed
+   * out until you tap them in on the standings screen — and gates the player
+   * dropdowns so you're never scrolling past people who aren't there.
+   */
+  presentIds: string[];
+  togglePresent: (playerId: string) => void;
+  /** Active players who are here tonight. Falls back to everyone if none set. */
+  availablePlayers: Player[];
+
   // Admin — mirrors convex/admin.ts one-for-one.
   members: Member[];
   /** The signed-in user. Fixtures assume the first admin; Convex uses the JWT. */
@@ -72,6 +83,34 @@ export function StoreProvider({ children }: { children: ReactNode }): ReactNode 
   const [games, setGames] = useState<GameWithRounds[]>(() => [...GAMES]);
   const [members, setMembers] = useState<Member[]>(() => [...MEMBERS]);
   const [players, setPlayers] = useState<Player[]>(() => [...PLAYERS]);
+
+  /**
+   * Presence is stored against the night it belongs to, so it survives a reload
+   * mid-evening but is simply absent once the night rolls over at 3am. No
+   * expiry job needed — a new night reads a key that was never written.
+   */
+  const [presentIds, setPresentIds] = useState<string[]>(() => {
+    try {
+      const raw = window.localStorage.getItem(`present:${currentNightKey()}`);
+      return raw ? (JSON.parse(raw) as string[]) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const togglePresent = useCallback((playerId: string): void => {
+    setPresentIds((current) => {
+      const next = current.includes(playerId)
+        ? current.filter((id) => id !== playerId)
+        : [...current, playerId];
+      try {
+        window.localStorage.setItem(`present:${currentNightKey()}`, JSON.stringify(next));
+      } catch {
+        // Private browsing or a full quota — presence just won't survive a reload.
+      }
+      return next;
+    });
+  }, []);
 
   // With Convex this comes from the Access JWT via players.me. In fixtures we
   // assume you're the first admin so the screen is reachable.
@@ -201,6 +240,14 @@ export function StoreProvider({ children }: { children: ReactNode }): ReactNode 
     [games],
   );
 
+  // Before anyone is marked in, fall back to everyone — otherwise the very
+  // first game of a night would have nobody to pick from.
+  const availablePlayers = useMemo(() => {
+    const active = players.filter((player) => player.isActive);
+    if (presentIds.length === 0) return active;
+    return active.filter((player) => presentIds.includes(player.id));
+  }, [players, presentIds]);
+
   const value = useMemo<StoreValue>(
     () => ({
       players,
@@ -210,6 +257,9 @@ export function StoreProvider({ children }: { children: ReactNode }): ReactNode 
       removeLastRound,
       softDelete,
       getGame,
+      presentIds,
+      togglePresent,
+      availablePlayers,
       members,
       currentEmail,
       isAdmin,
@@ -225,6 +275,9 @@ export function StoreProvider({ children }: { children: ReactNode }): ReactNode 
       removeLastRound,
       softDelete,
       getGame,
+      presentIds,
+      togglePresent,
+      availablePlayers,
       members,
       currentEmail,
       isAdmin,
