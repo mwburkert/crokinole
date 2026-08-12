@@ -185,7 +185,16 @@ export function BoardScorer({
   const handleDown = (event: PointerEvent, source: Source, color: DiscColor): void => {
     const point = pointAt(event);
     if (!point) return;
-    event.currentTarget.setPointerCapture?.(event.pointerId);
+    // setPointerCapture throws NotFoundError for a pointer id the browser
+    // doesn't recognise. Uncaught, that aborted handleDown before the hold
+    // timer was ever armed — so a press on a placed disc did nothing at all.
+    // Capture is an optimisation here, not a requirement: events still bubble
+    // to the <svg>, which is where move and up are handled.
+    try {
+      event.currentTarget.setPointerCapture?.(event.pointerId);
+    } catch {
+      // Not capturable — carry on uncaptured.
+    }
     pending.current = { source, x: point.x, y: point.y, color };
 
     // Touching a pile or stash selects that colour immediately — the same

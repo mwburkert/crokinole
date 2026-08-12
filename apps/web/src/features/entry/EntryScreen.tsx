@@ -4,6 +4,7 @@ import {
   gameStanding,
   placementComplete,
   remaining,
+  scoreRoundInput,
   snapIntoRegion,
   scoreRound,
   settle,
@@ -17,6 +18,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { useStore } from "../../data/store";
 import { Card, Money } from "../../ui/components";
 import { BoardScorer } from "./BoardScorer";
+import { MatchScoreCard } from "./MatchScoreCard";
 import { ManualEntry } from "./ManualEntry";
 
 /**
@@ -44,6 +46,8 @@ export function EntryScreen(): ReactNode {
   const [future, setFuture] = useState<PlacedDisc[][]>([]);
   /** Which round the scoreboard overlay is showing. `null` = the live one. */
   const [editing, setEditing] = useState<number | null>(null);
+  /** The scorecard is the moment the match ends; the settlement follows it. */
+  const [cardDone, setCardDone] = useState(false);
 
   const game = gameId ? getGame(gameId) : undefined;
   if (!game) return <p className="empty">That game is gone.</p>;
@@ -125,15 +129,40 @@ export function EntryScreen(): ReactNode {
     const result = settle(game);
     const winner = standing.winner as TeamKey;
     const everyone = [...game.teams.A.playerIds, ...game.teams.B.playerIds];
+
+    // The scorecard IS the "Final" card — the old one restated what the sheet
+    // already shows, so it's gone rather than stacked on top of it. Money comes
+    // after, once you've had the moment.
+    if (!cardDone) {
+      return (
+        <div className="stack">
+          <MatchScoreCard
+            rounds={game.rounds.map((round) => {
+              const score = scoreRoundInput(round, cfg);
+              return {
+                index: round.index,
+                aPoints: score.aPoints,
+                bPoints: score.bPoints,
+                result: score.result,
+              };
+            })}
+            teamAName={sideName("A")}
+            teamBName={sideName("B")}
+            matchPoints={standing.matchPoints}
+            colorA={colorA}
+            colorB={colorB}
+            onDone={() => setCardDone(true)}
+          />
+        </div>
+      );
+    }
+
     return (
       <div className="stack">
-        <Card title="Final">
-          <p style={{ fontSize: "1.35rem", fontWeight: 800, margin: "0 0 0.35rem" }}>
-            {sideName(winner)} win
-          </p>
-          <p className="num muted" style={{ margin: 0 }}>
-            {standing.matchPoints[winner]}–{standing.matchPoints[winner === "A" ? "B" : "A"]} match
-            points over {standing.roundsPlayed} rounds
+        <Card>
+          <p style={{ fontSize: "1.2rem", fontWeight: 800, margin: 0 }}>
+            {sideName(winner)} win {standing.matchPoints[winner]}–
+            {standing.matchPoints[winner === "A" ? "B" : "A"]}
           </p>
         </Card>
 

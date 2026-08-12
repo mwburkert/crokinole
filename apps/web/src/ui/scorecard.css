@@ -238,10 +238,12 @@
 
 .scorecard__circle {
   position: absolute;
-  inset: -0.3rem -0.1rem;
-  width: auto;
-  height: auto;
-  /* Stroke stays even width despite the squashed viewBox. */
+  top: -0.3rem;
+  left: -0.1rem;
+  /* Sized explicitly rather than by insets: an inline SVG has no intrinsic
+     width, so `width: auto` would fall back to the 300×150 default size. */
+  width: calc(100% + 0.2rem);
+  height: calc(100% + 0.6rem);
   overflow: visible;
   fill: none;
   stroke: var(--accent);
