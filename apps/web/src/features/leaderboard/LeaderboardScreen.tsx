@@ -158,7 +158,7 @@ export function LeaderboardScreen(): ReactNode {
                 checked={showAbsent}
                 onChange={(event) => setShowAbsent(event.target.checked)}
               />
-              Show everyone else
+              Show inactive
             </label>
           </>
         ) : null}
