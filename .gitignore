@@ -1,0 +1,7 @@
+node_modules/
+dist/ build/ .vite/ coverage/
+.env .env.*
+!.env.example
+.convex/
+*.pem *.key
+.DS_Store
