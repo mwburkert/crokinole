@@ -37,9 +37,26 @@ function TabBar(): ReactNode {
         </span>
         History
       </NavLink>
-      <NavLink to={live ? `/games/${live.id}/play` : "/games/new"} className="tabbar__link">
-        <span className="tabbar__glyph" aria-hidden="true">
-          ⊕
+      {/* The primary action, shaped like the thing it starts. Rides above the
+          bar with a collar of the bar's own colour, which is what cuts the top
+          line and reads as a bulge. */}
+      <NavLink
+        to={live ? `/games/${live.id}/play` : "/games/new"}
+        className="tabbar__link tabbar__link--board"
+        aria-label={live ? "Resume game" : "New game"}
+      >
+        <span className="boardbtn" aria-hidden="true">
+          <svg viewBox="0 0 48 48">
+            <circle cx="24" cy="24" r="23" className="boardbtn__frame" />
+            <circle cx="24" cy="24" r="20" className="boardbtn__surface" />
+            <circle cx="24" cy="24" r="13.5" className="boardbtn__ring" />
+            <circle cx="24" cy="24" r="7" className="boardbtn__ring" />
+            {live ? (
+              <path d="M20.5 18.5 L30 24 L20.5 29.5 Z" className="boardbtn__mark" />
+            ) : (
+              <path d="M24 17.5 V30.5 M17.5 24 H30.5" className="boardbtn__plus" />
+            )}
+          </svg>
         </span>
         {live ? "Resume" : "New"}
       </NavLink>

@@ -355,7 +355,7 @@ export function EntryScreen(): ReactNode {
           disabled={past.length === 0}
           onClick={undo}
         >
-          ↶
+          ↺
         </button>
         <button
           type="button"
@@ -364,7 +364,7 @@ export function EntryScreen(): ReactNode {
           disabled={future.length === 0}
           onClick={redo}
         >
-          ↷
+          ↻
         </button>
         <button type="button" className="btn btn--ghost" onClick={() => navigate("/games")}>
           Finish later

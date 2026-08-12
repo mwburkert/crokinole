@@ -219,6 +219,12 @@ export function ManualEntry({
       </div>
 
       <div className="row" style={{ marginTop: "0.75rem" }}>
+
+        {/* The only way out. Unapplied edits are lost, which is why it says
+            Discard rather than Close. */}
+        <button type="button" className="btn btn--ghost" onClick={onClose}>
+          {dirty ? "Discard" : "Close"}
+        </button>
         <button
           type="button"
           className="btn btn--accent"
@@ -245,11 +251,6 @@ export function ManualEntry({
           disabled={!dirty}
         >
           {isLive ? "Apply" : `Save round ${roundIndex + 1}`}
-        </button>
-        {/* The only way out. Unapplied edits are lost, which is why it says
-            Discard rather than Close. */}
-        <button type="button" className="btn btn--ghost" onClick={onClose}>
-          {dirty ? "Discard" : "Close"}
         </button>
       </div>
     </div>

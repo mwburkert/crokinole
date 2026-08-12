@@ -303,9 +303,12 @@
   right: 0;
   z-index: 20;
   display: flex;
+  align-items: flex-end;
   background: var(--bg-raised);
   border-top: 1px solid var(--line);
   padding-bottom: env(safe-area-inset-bottom);
+  /* The board button rises out of the bar. */
+  overflow: visible;
 }
 
 .tabbar__link {
@@ -1508,4 +1511,76 @@ html { scrollbar-width: none; }
     animation-duration: 1ms;
     animation-iteration-count: 1;
   }
+}
+
+
+/* ── The board button ────────────────────────────────────────────────────── */
+
+.tabbar__link--board {
+  /* Same label baseline as its neighbours, with the board itself lifted clear. */
+  justify-content: flex-end;
+  padding-bottom: 0.4rem;
+  gap: 4px;
+}
+
+.boardbtn {
+  display: block;
+  width: 3.6rem;
+  height: 3.6rem;
+  margin-top: -1.5rem;
+  border-radius: 50%;
+  /* A collar of the bar's own colour — this is what cuts the top border line
+     and makes the bar look like it bulges around the button. */
+  box-shadow: 0 0 0 6px var(--bg-raised), 0 3px 8px rgb(0 0 0 / 0.28);
+}
+
+.boardbtn svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.boardbtn__frame { fill: var(--walnut); }
+.boardbtn__surface { fill: var(--maple); }
+
+.boardbtn__ring {
+  fill: none;
+  stroke: var(--walnut-soft);
+  stroke-width: 1.5;
+}
+
+.boardbtn__mark { fill: var(--twenty); }
+
+.boardbtn__plus {
+  stroke: var(--twenty);
+  stroke-width: 4;
+  stroke-linecap: round;
+  fill: none;
+}
+
+.tabbar__link--board[aria-current="page"] .boardbtn {
+  box-shadow: 0 0 0 6px var(--bg-raised), 0 0 0 8px var(--accent),
+    0 3px 8px rgb(0 0 0 / 0.28);
+}
+
+/* ── Entry screen rhythm ─────────────────────────────────────────────────── */
+
+/* Chips sit almost snug under the score card; the gap below the board matches
+   the gap above it, so the board looks centred in its own space. */
+.scorer {
+  margin-top: 0.3rem;
+}
+
+.scorer + .btn--lg,
+.scorer + .overlay + .btn--lg {
+  margin-top: 1.35rem;
+}
+
+/* The secondary row stops just short of the bulge rather than tucking under it. */
+.app__main {
+  padding-bottom: calc(var(--tap) + 4.25rem);
+}
+
+.row--tools {
+  margin-bottom: 0.25rem;
 }

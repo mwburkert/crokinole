@@ -50,8 +50,8 @@ const SLOP = 10;
  * directly in front of each seat — a circle in a square leaves the corners free,
  * whereas above and below the board there is nothing to spare.
  */
-const VIEW = 242;
-const BOARD_TOP = 42;
+const VIEW = 232;
+const BOARD_TOP = 32;
 
 /** Board space (0–200, centred 100,100) -> SVG space. */
 const toView = (x: number, y: number): { x: number; y: number } => ({
@@ -83,8 +83,8 @@ interface Drag {
  * colour you meant, so there was never a reason to state it separately first.
  */
 const PILES: { x: number; y: number; team: "A" | "B" }[] = [
-  { x: 17, y: 183, team: "A" },
-  { x: 183, y: 183, team: "B" },
+  { x: 21, y: 179, team: "A" },
+  { x: 179, y: 179, team: "B" },
 ];
 
 export interface BoardScorerProps {
@@ -395,8 +395,8 @@ export function BoardScorer({
 
         {/* Twenties, laid out in a row directly under each score card so the
             two sides read at a glance without anyone counting a number. */}
-        <Stash x={7} color={colorA} count={twentiesOf(colorA)} onDown={handleDown} />
-        <Stash x={193} color={colorB} count={twentiesOf(colorB)} onDown={handleDown} rightAligned />
+        <Stash x={9} color={colorA} count={twentiesOf(colorA)} onDown={handleDown} />
+        <Stash x={191} color={colorB} count={twentiesOf(colorB)} onDown={handleDown} rightAligned />
 
         {/* One pile per colour: tap selects, hold-and-drag takes a disc. */}
         {PILES.map((pile, index) => {
@@ -471,7 +471,7 @@ export function BoardScorer({
                 "--sink-x0": `${BOARD_CENTRE}px`,
                 "--sink-y0": `${BOARD_CENTRE + BOARD_TOP}px`,
                 "--sink-x1": `${sinking.to}px`,
-                "--sink-y1": "20px",
+                "--sink-y1": "14px",
               } as CSSProperties
             }
           />
@@ -659,7 +659,7 @@ function Stash({
         <circle
           key={index}
           cx={rightAligned ? x - index * step : x + index * step}
-          cy={20}
+          cy={14}
           r={DISC_RADIUS * 0.85}
           className={`scorer__disc scorer__disc--${color}`}
         />
