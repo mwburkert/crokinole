@@ -35,8 +35,11 @@ const HOLD_MS = 130;
  * drop. Lifting it clear is the single biggest improvement to touch drag —
  * and the hit-test uses the LIFTED position, not the finger, so what you see
  * is exactly what lands.
+ *
+ * Halved from the first pass: enough to clear a fingertip, close enough that
+ * the disc still feels attached to the hand moving it rather than towed.
  */
-const LIFT = 34;
+const LIFT = 17;
 /** How long a disc must hover the centre before the hole is fully open. */
 const HOLE_OPEN_MS = 650;
 /** How far the hole opens, as a multiple of its resting radius. */
