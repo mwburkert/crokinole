@@ -85,9 +85,11 @@ Phase 1 ships a plain leaderboard, **behind auth like the rest of the app** (rev
   Group to open it.
 - **If you ever want a public view**, that's a deliberate Phase 2 decision, and it reopens three
   things Phase 1 closed: the two-query split (money must then be excluded in the query layer, not
-  the UI), the SPA path-policy caveat in §7.4, and an unbounded-audience surface on Convex egress
+  the UI), the SPA path-policy caveat in §7.4, and an unbounded-audience surface on Convex usage
   — anonymous viewers holding reactive subscriptions are the one realistic way usage runs away.
   Serve any public route as a **cached, non-reactive query** if you do it.
+  > ⚠️ Read "Convex egress" here until 2026-08-12. The meter reactive reads actually pressure is
+  > very likely **function calls and Database I/O**, not the *data egress* line. See §9.9.
 
 ---
 

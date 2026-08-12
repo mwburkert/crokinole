@@ -387,7 +387,10 @@ to migrate, and Vercel discourages being proxied by Cloudflare, though its state
 degraded Vercel Analytics, geo-targeting, and Firewall, none of which this app uses).
 
 **Convex free tier:** 1M function calls/mo, 0.5 GB DB, **1 GB egress/mo**, limits are **per team**
-with no project cap — all three projects on one free team. **Never sit on the Starter plan**: it
+with no project cap — all three projects on one free team. ⚠️ **That single "1 GB egress" line is
+suspect** — §9.9's research reads the current pricing page as carrying **two** distinct 1 GB
+lines, *Database I/O (bandwidth)* and *Data egress*. One of the two readings is wrong; re-read
+the live page before relying on either. **Never sit on the Starter plan**: it
 bills for overage, but the configurable spend cap (warning + disable thresholds) is a
 **Professional** feature. Go Free → Professional with a limit set on day one.
 

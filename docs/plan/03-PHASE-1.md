@@ -350,9 +350,15 @@ That deletes work rather than adding it:
 - **§7.4's SPA caveat disappears.** Path-based Access policies can't gate `/admin/*` reliably,
   because client-side navigation makes no HTTP request. With the **whole hostname** gated there
   is no path policy to defeat, and `/admin/token` can live anywhere.
-- **The egress blow-up vector is gone.** Anonymous spectators holding reactive subscriptions were
-  the only unbounded-audience surface. Usage can now only grow when you deliberately add someone
-  to the `Crokinole Players` Access Group.
+- **The unbounded-audience vector is gone.** Anonymous spectators holding reactive subscriptions
+  were the only unbounded-audience surface. Usage can now only grow when you deliberately add
+  someone to the `Crokinole Players` Access Group.
+  > ⚠️ **Wording corrected 2026-08-12 (second pass) — this said "the egress blow-up vector".**
+  > Convex defines *data egress* as file downloads, action bandwidth, log streams and backups;
+  > reactive query traffic is very likely metered as **function calls and Database I/O** instead.
+  > The conclusion is unchanged — it is about *audience*, not about which meter — but the metric
+  > name was wrong. See §9.9. Note that §9 (tables and spectators) reintroduces an audience
+  > *within* the allowlist, which is what §9.10 Q9 asks about.
 
 **What it costs:** you can't show the app to anyone who isn't on the allowlist. That's ~30 seconds
 in the Zero Trust dashboard. Carving a public route back out later is easy; the reverse isn't.

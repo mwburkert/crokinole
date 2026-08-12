@@ -73,7 +73,8 @@ prerequisite.
 | 2 | **Make `ci` a required status check** on the `main` ruleset | agent | 10 min | nothing — see §8.3 |
 | 3 | Add the gitleaks pre-commit hook (§2.5) | agent | 20 min | nothing |
 | 4 | Fix the stale `gh auth refresh -u` claim in `README.md` | agent | 5 min | done in this PR |
-| 5 | **Two `convex/games.ts` bugs found by the §9 audit** — see [§9.12](09-TABLES.md#912-bugs-found-while-auditing-this--reported-not-fixed) | **migration agent** | ~30 min | Hand to whoever owns `convex/` this wave. `removeLastRound` never re-derives completion and can leave a phantom `in_progress` game; `setNotes` checks neither existence nor `deletedAt` |
+| 5 | 🚨 **`players.claim` skips its admin check entirely under the passcode** — [§9.12](09-TABLES.md#912-bugs-found-while-auditing-this--reported-not-fixed) | **migration agent** | ~10 min | `players.ts:107` guards with `if (caller.player && …) await assertAdmin(ctx)`. Under the interim `caller.player` is `null`, so the `&&` short-circuits and the guard **never runs** — any passcode holder can claim any player row as themselves. **Hand over immediately** |
+| 6 | **Two more `convex/games.ts` bugs from the same audit** — §9.12 | **migration agent** | ~30 min | `removeLastRound` never re-derives completion (latent — no UI calls it today); the missing `deletedAt` check in `setNotes` is **systemic across five mutations**, not one |
 
 ⚠️ **"Add `convex/` to the root `tsc -b`" is deliberately NOT in this tier**, though
 it looks like it belongs. CI would have to run `convex codegen` before typechecking
