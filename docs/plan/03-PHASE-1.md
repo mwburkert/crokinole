@@ -381,6 +381,62 @@ be mediocre; this can't.
 **Undo** must be reachable from the round entry screen. The most common real error is
 committing a round with a mis-tapped count.
 
+### The board scorer — specified 2026-08-12, not yet built
+
+Round entry becomes the board itself rather than eight steppers. Discs are placed where they
+actually came to rest, and the ring counts are **derived from those positions**.
+
+**Placement.** A colour toggle — two plain swatches, no text. A tap drops a disc into whichever
+section the tap centres on; ambiguous taps still place, because drag corrects them. Tap-and-hold
+grows the disc and drops its opacity to show it's grabbed; the target section highlights and
+pulses as the disc enters its hitbox.
+
+**⚠️ Every drag needs a hold buffer.** A drag must not engage on first contact — it waits for a
+short press (~180ms) or a deliberate movement threshold. Without it, a thumb resting on the board
+while scrolling flings discs around, and on a phone that is the difference between a scorer you
+trust and one you fight.
+
+**Piles.** Six per seat, four seats, 24 discs in play. A fixed repeated image that does not resize
+while dragging, with a counter. **When a seat's pile empties, drags from it pull from the
+partner's pile** until that is empty too — you should never have to reach across the board to
+find a disc that exists.
+
+**Stashes.** One per team, inboard of that team's score, holding their twenties. Dragging from a
+stash grabs that team's colour **and flips the toggle to match** — as does dragging from the other
+team's pile. The toggle follows what you actually grabbed rather than making you set it first.
+
+**The active colour is larger and interactive; the other side shrinks and goes inert.** That is
+what keeps 24 discs legible on a 393px board.
+
+**Twenties** animate up to their team's stash and **stay draggable back out of it**, because a
+disc that leaves the board with no way back is a mis-tap you cannot fix.
+
+**The ditch is a real drop zone.** This is what makes "all 24 accounted for" a satisfiable
+condition rather than a nag — discs in the ditch score nothing but are legitimately placed.
+
+**The score line** under each team's score card is a fixed underline in that team's colour. Not
+proportional; it labels ownership, nothing more.
+
+#### ⚠️ Positions are stored, and that is a real exception to §3.2.1
+
+`rounds` gains a `discs` array of `{ color, x, y, region }`. Position is **not derivable** from
+ring counts, so this is the first stored value that isn't a raw input — accepted deliberately, to
+replay a board later.
+
+It creates two sources for one number, so the rule is explicit: **positions are the source of
+truth when present, and ring counts are recomputed from them on every write.** They can never
+disagree. A round entered through the manual menu simply has no positions, and its counts stand
+on their own.
+
+#### Manual entry
+
+Behind a three-dot menu above the scoreboard: small +/− controls, directly editable number
+fields, and a total-score field for logging a round without detail. Section counts entered here
+**populate the board when the menu closes**.
+
+Committing with detail incomplete prompts: *"Place X more discs to record detailed scoring"*, with
+*"skipping will only record total score"* beneath, and **Back** / **Skip** options.
+
 ### Stats (Phase 1 scope only)
 
 Per player: games played, won, lost, win %, match points for, match points against, and net

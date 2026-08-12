@@ -47,6 +47,21 @@ export {
 } from "./scoring.js";
 export type { GameStanding, RoundScore } from "./scoring.js";
 
+export {
+  BOARD_CENTRE,
+  DISC_RADIUS,
+  RADII,
+  countsFromDiscs,
+  placeAt,
+  placedCount,
+  placementComplete,
+  radiusOf,
+  regionAt,
+  remaining,
+  snapIntoRegion,
+} from "./discs.js";
+export type { PlacedDisc, Region } from "./discs.js";
+
 export { formatCents, potCents, settle } from "./settle.js";
 
 export {

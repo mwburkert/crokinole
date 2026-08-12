@@ -562,7 +562,7 @@
 
 .scoreline__mp {
   font-family: var(--font-num);
-  font-size: 1.9rem;
+  font-size: 1.7rem;
   font-weight: 800;
   line-height: 1;
 }
@@ -656,12 +656,12 @@
 
 .differential {
   text-align: center;
-  padding: var(--gap) 0 var(--gap-sm);
+  padding: var(--gap-sm) 0 var(--gap-xs);
 }
 
 .differential__value {
   font-family: var(--font-num);
-  font-size: 3.25rem;
+  font-size: 2.4rem;
   font-weight: 800;
   line-height: 1;
   letter-spacing: -0.02em;
@@ -912,7 +912,7 @@
 
 @media (min-width: 30rem) {
   .differential__value {
-    font-size: 4rem;
+    font-size: 3rem;
   }
 }
 
@@ -1062,4 +1062,187 @@
 
 .legend__note {
   margin: var(--gap-sm) 0 0;
+}
+
+/* ── Board scorer ────────────────────────────────────────────────────────── */
+
+.scorer {
+  position: relative;
+}
+
+/* Capped so the whole round-entry screen clears an iPhone 15 without scrolling —
+   at full width the board alone ate 470px of an 852px viewport. */
+.scorer__svg {
+  width: 100%;
+  max-width: 19rem;
+  margin: 0 auto;
+  display: block;
+  touch-action: none; /* the board owns the gesture; the page must not scroll under it */
+  user-select: none;
+}
+
+.scorer__ring {
+  transition: filter 140ms ease;
+}
+
+/* The target region reacts as a disc enters its hitbox. */
+.scorer__ring.is-hover {
+  filter: brightness(1.12) saturate(1.15);
+  stroke: var(--accent);
+  stroke-width: 2;
+}
+
+.scorer__disc {
+  stroke: var(--walnut);
+  stroke-width: 0.8;
+  transition: r 130ms ease, opacity 130ms ease;
+}
+
+.scorer__disc--black { fill: var(--disc-black); }
+.scorer__disc--white { fill: var(--disc-white); }
+
+.scorer__disc.is-dragging,
+.scorer__disc.is-ghost {
+  stroke: var(--accent);
+  stroke-width: 1.4;
+}
+
+.scorer__disc.is-ghost {
+  pointer-events: none;
+}
+
+.scorer__count,
+.scorer__stashcount {
+  font-family: var(--font-num);
+  font-size: 9px;
+  font-weight: 800;
+  fill: var(--ink-soft);
+  text-anchor: middle;
+}
+
+.scorer__stashcount {
+  text-anchor: start;
+}
+
+.scorer__pile,
+.scorer__stash {
+  cursor: grab;
+}
+
+.scorer__flash {
+  font-family: var(--font-num);
+  font-size: 15px;
+  font-weight: 800;
+  fill: var(--accent);
+  text-anchor: middle;
+  pointer-events: none;
+  animation: flash-up 700ms ease-out forwards;
+}
+
+@keyframes flash-up {
+  from { opacity: 1; transform: translateY(0); }
+  to { opacity: 0; transform: translateY(-16px); }
+}
+
+.scorer__toggle {
+  display: flex;
+  justify-content: center;
+  gap: var(--gap-sm);
+  margin-top: var(--gap-sm);
+}
+
+.swatch {
+  width: 3.25rem;
+  height: 2.5rem;
+  border-radius: var(--radius);
+  border: 2px solid var(--line);
+  cursor: pointer;
+}
+
+.swatch--black { background: var(--disc-black); }
+.swatch--white { background: var(--disc-white); }
+
+.swatch[aria-pressed="true"] {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+/* The score card's ownership underline — fixed, not proportional. */
+.scoreline__side {
+  padding-bottom: 4px;
+  border-bottom: 4px solid transparent;
+}
+
+.scoreline__side--black { border-bottom-color: var(--disc-black); }
+.scoreline__side--white { border-bottom-color: var(--disc-white); }
+
+/* ── Manual scoring menu ─────────────────────────────────────────────────── */
+
+.manual__cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--gap-sm);
+}
+
+.manual__col {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: var(--gap-sm);
+}
+
+.manual__head {
+  text-align: center;
+  font-weight: 700;
+  font-size: 0.8rem;
+  margin-bottom: 0.35rem;
+}
+
+.manual__row {
+  display: grid;
+  grid-template-columns: 1.1rem 1.6rem 1fr 1.6rem;
+  align-items: center;
+  gap: 0.15rem;
+  margin-bottom: 0.25rem;
+}
+
+.manual__ring {
+  font-size: 0.7rem;
+  color: var(--ink-faint);
+  font-family: var(--font-num);
+}
+
+.manual__step {
+  min-height: 1.9rem;
+  border: 1px solid var(--line);
+  border-radius: 0.4rem;
+  background: var(--bg);
+  color: var(--ink);
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.manual__field {
+  min-height: 1.9rem;
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 0.4rem;
+  background: var(--bg);
+  color: var(--ink);
+  text-align: center;
+  font-weight: 700;
+}
+
+.manual__total {
+  text-align: center;
+  font-size: 1.2rem;
+  font-weight: 800;
+  border-top: 1px dashed var(--line);
+  margin-top: 0.35rem;
+  padding-top: 0.25rem;
+}
+
+.manual__totals {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--gap-sm);
 }

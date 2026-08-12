@@ -1,12 +1,13 @@
 import {
-  EMPTY_RING_COUNTS,
+  countsFromDiscs,
   discsPerTeam,
-  discsUsed,
   gameStanding,
-  roundPoints,
+  placementComplete,
+  remaining,
+  snapIntoRegion,
   scoreRound,
   settle,
-  validateRound,
+  type PlacedDisc,
   type RingCounts,
   type TeamKey,
 } from "@crokinole/core";
@@ -14,14 +15,9 @@ import { useState, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
 import { useStore } from "../../data/store";
-import { Card, Money, Stepper } from "../../ui/components";
-
-const RINGS: { key: keyof RingCounts; label: string }[] = [
-  { key: "twenties", label: "20" },
-  { key: "fifteens", label: "15" },
-  { key: "tens", label: "10" },
-  { key: "fives", label: "5" },
-];
+import { Card, Money } from "../../ui/components";
+import { BoardScorer } from "./BoardScorer";
+import { ManualEntry } from "./ManualEntry";
 
 /**
  * Round entry — §3.5 steps 2 to 5. **This is the screen that has to be fast.**
@@ -36,33 +32,58 @@ export function EntryScreen(): ReactNode {
   const navigate = useNavigate();
   const { getGame, addRound, removeLastRound, players } = useStore();
 
-  const [a, setA] = useState<RingCounts>({ ...EMPTY_RING_COUNTS });
-  const [b, setB] = useState<RingCounts>({ ...EMPTY_RING_COUNTS });
+  /** Positions are the source of truth; counts are derived from them (§3.5). */
+  const [discs, setDiscs] = useState<PlacedDisc[]>([]);
+  /** Set only when a round was typed in rather than placed. */
+  const [manualCounts, setManualCounts] = useState<{ a: RingCounts; b: RingCounts } | null>(null);
+  const [totals, setTotals] = useState<{ a: number; b: number } | null>(null);
+  const [showManual, setShowManual] = useState(false);
+  const [confirming, setConfirming] = useState(false);
 
   const game = gameId ? getGame(gameId) : undefined;
   if (!game) return <p className="empty">That game is gone.</p>;
 
   const cfg = game.config;
   const standing = gameStanding(game.rounds, cfg);
-  const pending = scoreRound(a, b, cfg);
   const budget = discsPerTeam(cfg);
+  const colorA = game.teams.A.color;
+  const colorB = game.teams.B.color;
+
+  // countsFromDiscs is the ONLY path from a placed board to counts, so the two
+  // can never disagree (§3.5).
+  const a = manualCounts ? manualCounts.a : countsFromDiscs(discs, colorA);
+  const b = manualCounts ? manualCounts.b : countsFromDiscs(discs, colorB);
+  const pending = scoreRound(a, b, cfg, totals ? { A: totals.a, B: totals.b } : undefined);
 
   const nameOf = (id: string): string =>
     players.find((player) => player.id === id)?.displayName ?? "?";
   const sideName = (team: TeamKey): string => game.teams[team].playerIds.map(nameOf).join(" & ");
 
-  const issues = validateRound({ index: game.rounds.length, A: a, B: b }, cfg, game.teams);
-  const blocking = issues.filter((issue) => issue.severity === "error");
+  const left = remaining(discs, budget);
+  const complete = manualCounts !== null || totals !== null || placementComplete(discs, budget);
+  const stillToPlace = left.black + left.white;
 
   const reset = (): void => {
-    setA({ ...EMPTY_RING_COUNTS });
-    setB({ ...EMPTY_RING_COUNTS });
+    setDiscs([]);
+    setManualCounts(null);
+    setTotals(null);
+    setConfirming(false);
   };
 
-  const commit = (): void => {
-    if (!gameId || blocking.length > 0) return;
+  const write = (): void => {
+    if (!gameId) return;
     addRound(gameId, a, b);
     reset();
+  };
+
+  /** Prompt before losing detail, per §3.5. */
+  const commit = (): void => {
+    if (!gameId) return;
+    if (!complete) {
+      setConfirming(true);
+      return;
+    }
+    write();
   };
 
   // Auto-finish (§3.5 step 5): the game flips itself the moment a side reaches
@@ -108,49 +129,66 @@ export function EntryScreen(): ReactNode {
   return (
     <div>
       <div className="scoreline">
-        <div className="scoreline__side">
-          <span className={`disc disc--${game.teams.A.color}`} />
+        <div className={`scoreline__side scoreline__side--${colorA}`}>
           <span className="scoreline__mp num">{standing.matchPoints.A}</span>
         </div>
         <div className="scoreline__label">
           to {cfg.targetMatchPoints}
           <br />
           round {game.rounds.length + 1}
+          <button
+            type="button"
+            className="infobtn"
+            aria-label="Manual scoring"
+            aria-expanded={showManual}
+            onClick={() => setShowManual((current) => !current)}
+            style={{ justifyContent: "center", minHeight: "1.5rem" }}
+          >
+            ⋯
+          </button>
         </div>
-        <div className="scoreline__side scoreline__side--right">
+        <div className={`scoreline__side scoreline__side--right scoreline__side--${colorB}`}>
           <span className="scoreline__mp num">{standing.matchPoints.B}</span>
-          <span className={`disc disc--${game.teams.B.color}`} />
         </div>
       </div>
 
-      <div className="boards">
-        {(["A", "B"] as TeamKey[]).map((team) => {
-          const counts = team === "A" ? a : b;
-          const setCounts = team === "A" ? setA : setB;
-          const used = discsUsed(counts);
-          return (
-            <div className="board" key={team}>
-              <div className="board__head">
-                <span className={`disc disc--${game.teams[team].color}`} />
-                <span>{sideName(team)}</span>
-              </div>
-              {RINGS.map((ring) => (
-                <Stepper
-                  key={ring.key}
-                  label={ring.label}
-                  value={counts[ring.key]}
-                  onChange={(value) => setCounts({ ...counts, [ring.key]: value })}
-                  canIncrement={used < budget}
-                />
-              ))}
-              <div className="board__total num">{roundPoints(counts, cfg)}</div>
-              <p className="faint" style={{ textAlign: "center", margin: 0 }}>
-                {used}/{budget} discs
-              </p>
-            </div>
-          );
-        })}
-      </div>
+      {showManual ? (
+        <Card>
+          <ManualEntry
+            config={cfg}
+            a={a}
+            b={b}
+            onApply={(next) => {
+              if ("totals" in next) {
+                // Score-only: no detail, so the board stays empty.
+                setTotals(next.totals);
+                setManualCounts(null);
+                setDiscs([]);
+              } else {
+                // Section counts populate the board when the menu closes.
+                setTotals(null);
+                setManualCounts(next);
+                setDiscs(discsFromCounts(next.a, colorA).concat(discsFromCounts(next.b, colorB)));
+              }
+            }}
+            onClose={() => setShowManual(false)}
+          />
+        </Card>
+      ) : (
+        <BoardScorer
+          discs={discs}
+          onChange={(next) => {
+            setDiscs(next);
+            // Touching the board makes it authoritative again.
+            setManualCounts(null);
+            setTotals(null);
+          }}
+          perTeam={budget}
+          colorA={colorA}
+          colorB={colorB}
+          singles={cfg.format === "singles"}
+        />
+      )}
 
       <div className="differential">
         <div className="differential__value num">
@@ -163,23 +201,36 @@ export function EntryScreen(): ReactNode {
         </div>
       </div>
 
-      {issues.map((issue, index) => (
-        <p key={index} className={`issue issue--${issue.severity}`}>
-          {issue.message}
-        </p>
-      ))}
-
-      <button
-        type="button"
-        className="btn btn--accent btn--block btn--lg"
-        onClick={commit}
-        disabled={blocking.length > 0}
-      >
-        Commit round
-        {pending.result !== "tie"
-          ? ` · ${sideName(pending.result)} +${cfg.matchPointsWin}`
-          : ` · ${cfg.matchPointsTie} each`}
-      </button>
+      {confirming ? (
+        <Card>
+          <p style={{ margin: "0 0 0.25rem", fontWeight: 700 }}>
+            Place {stillToPlace} more {stillToPlace === 1 ? "disc" : "discs"} to record detailed
+            scoring
+          </p>
+          <p className="faint" style={{ margin: "0 0 0.75rem" }}>
+            Skipping will only record the total score.
+          </p>
+          <div className="row">
+            <button type="button" className="btn" onClick={() => setConfirming(false)}>
+              Back
+            </button>
+            <button type="button" className="btn btn--accent" onClick={write}>
+              Skip
+            </button>
+          </div>
+        </Card>
+      ) : (
+        <button
+          type="button"
+          className="btn btn--accent btn--block btn--lg"
+          onClick={commit}
+        >
+          Commit round
+          {pending.result !== "tie"
+            ? ` · ${sideName(pending.result)} +${cfg.matchPointsWin}`
+            : ` · ${cfg.matchPointsTie} each`}
+        </button>
+      )}
 
       <div className="row" style={{ marginTop: "0.75rem" }}>
         <button type="button" className="btn btn--ghost" onClick={reset}>
@@ -199,4 +250,33 @@ export function EntryScreen(): ReactNode {
       </div>
     </div>
   );
+}
+
+/**
+ * Lay counts out on the board so section entry and the board agree.
+ * Positions are arbitrary within the correct ring — the ring is what carries
+ * meaning, and dragging afterwards refines it.
+ */
+function discsFromCounts(counts: RingCounts, color: "black" | "white"): PlacedDisc[] {
+  const out: PlacedDisc[] = [];
+  const rings: [keyof RingCounts, Parameters<typeof snapIntoRegion>[2], number][] = [
+    ["twenties", "twenty", 0],
+    ["fifteens", "fifteen", 19],
+    ["tens", "ten", 44],
+    ["fives", "five", 72],
+  ];
+  let seed = color === "black" ? 0 : Math.PI;
+  for (const [key, region, radius] of rings) {
+    const n = counts[key];
+    for (let i = 0; i < n; i += 1) {
+      seed += 0.8;
+      const point = snapIntoRegion(
+        100 + Math.cos(seed) * radius,
+        100 + Math.sin(seed) * radius,
+        region,
+      );
+      out.push({ id: `m${color}${key}${i}`, color, x: point.x, y: point.y, region });
+    }
+  }
+  return out;
 }

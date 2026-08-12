@@ -124,6 +124,33 @@ export default defineSchema({
     index: v.number(),
     A: ringCounts,
     B: ringCounts,
+    /**
+     * Where each disc came to rest (§3.5).
+     *
+     * ⚠️ The one stored value in this app that isn't a raw input and isn't
+     * derived — position cannot be recovered from ring counts. The rule that
+     * keeps the two honest: **when `discs` is present it is the source of
+     * truth, and A/B are recomputed from it by `countsFromDiscs` on every
+     * write.** A round typed into the manual menu simply has no `discs`, and
+     * its counts stand alone.
+     */
+    discs: v.optional(
+      v.array(
+        v.object({
+          id: v.string(),
+          color: v.union(v.literal("black"), v.literal("white")),
+          x: v.number(),
+          y: v.number(),
+          region: v.union(
+            v.literal("twenty"),
+            v.literal("fifteen"),
+            v.literal("ten"),
+            v.literal("five"),
+            v.literal("ditch"),
+          ),
+        }),
+      ),
+    ),
     /** Quick-entry escape hatch: overrides the derived total when set. */
     pointsOverride: v.optional(
       v.object({ A: v.optional(v.number()), B: v.optional(v.number()) }),
