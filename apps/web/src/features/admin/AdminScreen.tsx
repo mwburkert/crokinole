@@ -1,116 +1,230 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { MAX_NAME_LENGTH } from "@crokinole/core";
+import { useState, type ReactNode } from "react";
 
+import type { Member, Role } from "../../data/fixtures";
 import { useStore } from "../../data/store";
-import type { Role } from "../../data/fixtures";
 import { Badge, Card, Empty } from "../../ui/components";
 import { QrCode } from "./QrCode";
 
 /**
- * Admin (§3.6) — who may use the app, and how to get them in.
+ * Settings.
  *
- * ⚠️ This screen manages **roles**, not access. The Cloudflare Access Group
- * decides who can reach the app at all; someone added here who isn't in that
- * group never gets far enough to talk to Convex. That's stated on the screen
- * rather than buried, because a silent half-invite is the worst outcome — it
- * looks like it worked and the person still can't log in.
+ * Admins get the player list; everyone else gets only their own name and email.
+ * Per-player actions live behind a kebab so the list itself stays a scannable
+ * column of names — the thing you're actually looking for.
+ *
+ * ⚠️ Two lists still: the Cloudflare Access Group decides who can *reach* the
+ * app, this allowlist decides what they may *do*. See `convex/admin.ts`.
  */
 export function AdminScreen(): ReactNode {
-  const { members, currentEmail, isAdmin, invite, setRole, revoke } = useStore();
+  const { members, currentEmail, isAdmin, isSuperAdmin } = useStore();
+  const [adding, setAdding] = useState(false);
+  const [openMenu, setOpenMenu] = useState<string | null>(null);
 
-  const [email, setEmail] = useState("");
-  const [name, setName] = useState("");
-  const [role, setRoleInput] = useState<Role>("player");
-  const [copied, setCopied] = useState<string | null>(null);
-
-  // In production this is https://crokinole.burkert.app. Reading it from the
-  // page means the QR is always correct for wherever this is actually served.
-  const appUrl = typeof window === "undefined" ? "" : window.location.origin;
-
-  const pendingEmails = useMemo(
-    () => members.filter((member) => !member.hasSignedIn).map((member) => member.email),
-    [members],
-  );
-
-  const copy = async (text: string, key: string): Promise<void> => {
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopied(key);
-      setTimeout(() => setCopied((current) => (current === key ? null : current)), 1800);
-    } catch {
-      setCopied("failed");
-    }
-  };
-
-  const inviteText =
-    `You're in for crokinole. Open ${appUrl} on your phone, ` +
-    `enter your email, and type the code it sends you. ` +
-    `Add it to your home screen and it works like an app.`;
+  const me = members.find((member) => member.email === currentEmail);
 
   if (!isAdmin) {
-    return (
-      <Card title="Admin">
-        <Empty>You need an admin role to manage players.</Empty>
-      </Card>
-    );
+    return me ? <SelfSettings member={me} /> : <Card><Empty>Nothing to see here.</Empty></Card>;
   }
 
   return (
     <div className="stack">
-      <div className="banner">
-        <strong>Two lists, one job.</strong> Adding someone here sets their{" "}
-        <em>role</em>. They also need to be in the <strong>Crokinole Players</strong> group in
-        Cloudflare Access before they can reach the app at all — until then they'll be stopped at
-        the login screen.
-        <div className="row" style={{ marginTop: "0.6rem", flexWrap: "wrap" }}>
-          <button
-            type="button"
-            className="btn btn--ghost"
-            onClick={() => copy(members.map((member) => member.email).join(", "), "all")}
-          >
-            {copied === "all" ? "Copied ✓" : "Copy all emails"}
-          </button>
-          {pendingEmails.length > 0 ? (
+      <div className="spread">
+        <h2 className="card__title" style={{ margin: 0 }}>
+          Players — {members.length}
+        </h2>
+        <button
+          type="button"
+          className="iconbtn"
+          aria-label="Add a player"
+          onClick={() => setAdding(true)}
+        >
+          +
+        </button>
+      </div>
+
+      <Card>
+        {members.length === 0 ? (
+          <Empty>Nobody yet.</Empty>
+        ) : (
+          members.map((member) => (
+            <PlayerRow
+              key={member.email}
+              member={member}
+              locked={isSuperAdmin(member.email) && !isSuperAdmin(currentEmail)}
+              isSelf={member.email === currentEmail}
+              open={openMenu === member.email}
+              onToggleMenu={() =>
+                setOpenMenu((current) => (current === member.email ? null : member.email))
+              }
+            />
+          ))
+        )}
+      </Card>
+
+      {adding ? <AddSheet onClose={() => setAdding(false)} /> : null}
+    </div>
+  );
+}
+
+function PlayerRow({
+  member,
+  locked,
+  isSelf,
+  open,
+  onToggleMenu,
+}: {
+  member: Member;
+  locked: boolean;
+  isSelf: boolean;
+  open: boolean;
+  onToggleMenu: () => void;
+}): ReactNode {
+  const { setRole, revoke, updateProfile } = useStore();
+  const [editing, setEditing] = useState(false);
+  const [name, setName] = useState(member.displayName ?? "");
+  const [email, setEmail] = useState(member.email);
+  const [copied, setCopied] = useState(false);
+
+  const appUrl = typeof window === "undefined" ? "" : window.location.origin;
+
+  return (
+    <div className="prow">
+      <div className="prow__main">
+        <div className="prow__id">
+          <span className="name">{member.displayName ?? member.email}</span>
+          <span className="faint">{member.email}</span>
+        </div>
+        <div className="row" style={{ gap: "0.35rem" }}>
+          {member.role === "admin" ? <Badge>Admin</Badge> : null}
+          {locked ? null : (
             <button
               type="button"
-              className="btn btn--ghost"
-              onClick={() => copy(pendingEmails.join(", "), "pending")}
+              className="iconbtn iconbtn--sm"
+              aria-label={`Actions for ${member.displayName ?? member.email}`}
+              aria-expanded={open}
+              onClick={onToggleMenu}
             >
-              {copied === "pending"
-                ? "Copied ✓"
-                : `Copy ${pendingEmails.length} not-yet-signed-in`}
+              ⋯
             </button>
-          ) : null}
-          <a
-            className="btn btn--ghost"
-            href="https://one.dash.cloudflare.com/"
-            target="_blank"
-            rel="noreferrer noopener"
-          >
-            Open Zero Trust ↗
-          </a>
+          )}
         </div>
       </div>
 
-      <Card title="Add a player">
-        <div className="stack" style={{ gap: "0.6rem" }}>
+      {open && !locked ? (
+        <div className="prow__menu">
+          {editing ? (
+            <div className="stack" style={{ gap: "0.5rem" }}>
+              <input
+                className="field"
+                value={name}
+                maxLength={MAX_NAME_LENGTH}
+                onChange={(event) => setName(event.target.value)}
+                aria-label="Name"
+              />
+              <input
+                className="field"
+                value={email}
+                inputMode="email"
+                autoCapitalize="none"
+                onChange={(event) => setEmail(event.target.value)}
+                aria-label="Email"
+              />
+              <div className="row">
+                <button
+                  type="button"
+                  className="btn btn--accent"
+                  onClick={() => {
+                    updateProfile(member.email, { displayName: name, email });
+                    setEditing(false);
+                  }}
+                >
+                  Save
+                </button>
+                <button type="button" className="btn btn--ghost" onClick={() => setEditing(false)}>
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="menu">
+              <button type="button" className="menu__item" onClick={() => setEditing(true)}>
+                Edit name &amp; email
+              </button>
+              <button
+                type="button"
+                className="menu__item"
+                disabled={isSelf}
+                onClick={() => setRole(member.email, member.role === "admin" ? "player" : "admin")}
+              >
+                {member.role === "admin" ? "Make player" : "Make admin"}
+              </button>
+              <button
+                type="button"
+                className="menu__item"
+                onClick={() => {
+                  void navigator.clipboard
+                    ?.writeText(inviteText(appUrl))
+                    .then(() => setCopied(true))
+                    .catch(() => setCopied(false));
+                }}
+              >
+                {copied ? "Invite copied ✓" : "Copy invite"}
+              </button>
+              <button
+                type="button"
+                className="menu__item menu__item--danger"
+                disabled={isSelf}
+                onClick={() => revoke(member.email)}
+              >
+                Revoke access
+              </button>
+            </div>
+          )}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/** The `+` sheet: QR first, with a manual form behind a disclosure. */
+function AddSheet({ onClose }: { onClose: () => void }): ReactNode {
+  const { invite } = useStore();
+  const [manual, setManual] = useState(false);
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [role, setRole] = useState<Role>("player");
+
+  const appUrl = typeof window === "undefined" ? "" : window.location.origin;
+
+  return (
+    <Card title="Add someone">
+      <div style={{ display: "flex", justifyContent: "center", padding: "0.25rem 0 0.75rem" }}>
+        <QrCode value={appUrl} size={170} label="QR code linking to the app" />
+      </div>
+      <p className="faint" style={{ textAlign: "center", marginTop: 0 }}>
+        {appUrl}
+      </p>
+
+      {manual ? (
+        <div className="stack" style={{ gap: "0.5rem" }}>
           <input
-            className="btn"
-            style={{ width: "100%", textAlign: "left" }}
+            className="field"
             placeholder="Name"
             value={name}
+            maxLength={MAX_NAME_LENGTH}
             onChange={(event) => setName(event.target.value)}
-            aria-label="Player name"
+            aria-label="Name"
           />
           <input
-            className="btn"
-            style={{ width: "100%", textAlign: "left" }}
+            className="field"
             placeholder="email@example.com"
             inputMode="email"
             autoCapitalize="none"
             autoCorrect="off"
             value={email}
             onChange={(event) => setEmail(event.target.value)}
-            aria-label="Email address"
+            aria-label="Email"
           />
           <div className="segmented" role="group" aria-label="Role">
             {(["player", "admin"] as Role[]).map((option) => (
@@ -119,7 +233,7 @@ export function AdminScreen(): ReactNode {
                 type="button"
                 className="segmented__option"
                 aria-pressed={role === option}
-                onClick={() => setRoleInput(option)}
+                onClick={() => setRole(option)}
               >
                 {option === "player" ? "Player" : "Admin"}
               </button>
@@ -131,122 +245,85 @@ export function AdminScreen(): ReactNode {
             disabled={!email.includes("@") || name.trim() === ""}
             onClick={() => {
               invite({ email, displayName: name, role });
-              setEmail("");
-              setName("");
-              setRoleInput("player");
+              onClose();
             }}
           >
-            Add
+            Add &amp; send invite
           </button>
           <p className="faint" style={{ margin: 0 }}>
-            Creates their player record too, so you can pick them for a game before they've ever
-            opened the app.
+            ⚠️ Sending the email isn't wired up yet — it needs a mail provider and a verified
+            sending domain. For now this adds them and you share the link yourself.
           </p>
         </div>
-      </Card>
+      ) : (
+        <button type="button" className="btn btn--block" onClick={() => setManual(true)}>
+          Add manually instead
+        </button>
+      )}
 
-      <Card title={`Players — ${members.length}`}>
-        {members.length === 0 ? (
-          <Empty>Nobody yet.</Empty>
-        ) : (
-          members.map((member) => (
-            <div
-              key={member.email}
-              style={{ padding: "0.6rem 0", borderBottom: "1px solid var(--line)" }}
-            >
-              <div className="spread">
-                <strong>{member.displayName ?? member.email}</strong>
-                <span className="row" style={{ gap: "0.35rem" }}>
-                  {member.role === "admin" ? <Badge>Admin</Badge> : null}
-                  {member.hasSignedIn ? null : <Badge live>Not signed in</Badge>}
-                </span>
-              </div>
-              <div className="faint">{member.email}</div>
-              <div className="row" style={{ marginTop: "0.4rem", flexWrap: "wrap" }}>
-                <button
-                  type="button"
-                  className="btn btn--ghost"
-                  style={{ minHeight: "2.5rem" }}
-                  disabled={member.email === currentEmail}
-                  onClick={() =>
-                    setRole(member.email, member.role === "admin" ? "player" : "admin")
-                  }
-                >
-                  {member.role === "admin" ? "Make player" : "Make admin"}
-                </button>
-                <button
-                  type="button"
-                  className="btn btn--ghost"
-                  style={{ minHeight: "2.5rem" }}
-                  onClick={() => copy(inviteFor(appUrl), `invite-${member.email}`)}
-                >
-                  {copied === `invite-${member.email}` ? "Copied ✓" : "Copy invite"}
-                </button>
-                <button
-                  type="button"
-                  className="btn btn--ghost"
-                  style={{ minHeight: "2.5rem" }}
-                  disabled={member.email === currentEmail}
-                  onClick={() => revoke(member.email)}
-                >
-                  Revoke
-                </button>
-              </div>
-            </div>
-          ))
-        )}
-        <p className="faint" style={{ marginTop: "0.75rem", marginBottom: 0 }}>
-          Revoking removes permission, never the person — their past games still score.
-        </p>
-      </Card>
-
-      <Card title="Invite by QR">
-        <div style={{ display: "flex", justifyContent: "center", padding: "0.5rem 0 0.9rem" }}>
-          <QrCode value={appUrl} size={190} label="QR code linking to the app" />
-        </div>
-        <p className="faint" style={{ textAlign: "center", marginTop: 0 }}>
-          {appUrl}
-        </p>
-        <p style={{ fontSize: "0.9rem" }}>
-          Hand them your phone or point theirs at this. They enter their email, get a one-time
-          code, and they're in — no password, no account to create. It only works if their address
-          is already in the Access group.
-        </p>
-        <div className="row" style={{ flexWrap: "wrap" }}>
-          <button type="button" className="btn btn--ghost" onClick={() => copy(appUrl, "url")}>
-            {copied === "url" ? "Copied ✓" : "Copy link"}
-          </button>
-          <button
-            type="button"
-            className="btn btn--ghost"
-            onClick={() => copy(inviteText, "text")}
-          >
-            {copied === "text" ? "Copied ✓" : "Copy invite message"}
-          </button>
-          <a
-            className="btn btn--ghost"
-            href={`sms:?&body=${encodeURIComponent(inviteText)}`}
-          >
-            Send as text
-          </a>
-          <a
-            className="btn btn--ghost"
-            href={`mailto:?subject=${encodeURIComponent("Crokinole")}&body=${encodeURIComponent(inviteText)}`}
-          >
-            Send as email
-          </a>
-        </div>
-        {copied === "failed" ? (
-          <p className="issue issue--warning" style={{ marginTop: "0.6rem" }}>
-            Couldn't reach the clipboard — copy the link above by hand.
-          </p>
-        ) : null}
-      </Card>
-    </div>
+      <button
+        type="button"
+        className="btn btn--ghost btn--block"
+        style={{ marginTop: "0.5rem" }}
+        onClick={onClose}
+      >
+        Done
+      </button>
+    </Card>
   );
 }
 
-function inviteFor(appUrl: string): string {
+/** A regular player's whole settings screen. */
+function SelfSettings({ member }: { member: Member }): ReactNode {
+  const { updateProfile } = useStore();
+  const [name, setName] = useState(member.displayName ?? "");
+  const [email, setEmail] = useState(member.email);
+  const [saved, setSaved] = useState(false);
+
+  return (
+    <Card title="Your details">
+      <div className="stack" style={{ gap: "0.5rem" }}>
+        <input
+          className="field"
+          value={name}
+          maxLength={MAX_NAME_LENGTH}
+          onChange={(event) => {
+            setName(event.target.value);
+            setSaved(false);
+          }}
+          aria-label="Your name"
+        />
+        <input
+          className="field"
+          value={email}
+          inputMode="email"
+          autoCapitalize="none"
+          onChange={(event) => {
+            setEmail(event.target.value);
+            setSaved(false);
+          }}
+          aria-label="Your email"
+        />
+        <button
+          type="button"
+          className="btn btn--accent btn--block"
+          onClick={() => {
+            updateProfile(member.email, { displayName: name, email });
+            setSaved(true);
+          }}
+        >
+          {saved ? "Saved ✓" : "Save"}
+        </button>
+        <p className="faint" style={{ margin: 0 }}>
+          Names are capped at {MAX_NAME_LENGTH} characters so they fit the board and the standings
+          at one consistent size.
+        </p>
+      </div>
+    </Card>
+  );
+}
+
+function inviteText(appUrl: string): string {
   return (
     `You're in for crokinole. Open ${appUrl} on your phone, enter your email, ` +
     `and type the code it sends you. Add it to your home screen and it works like an app.`

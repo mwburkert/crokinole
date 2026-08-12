@@ -97,7 +97,7 @@ export function SegmentedControl<T extends string>({
   onChange,
   label,
 }: {
-  options: { value: T; label: string }[];
+  options: { value: T; label: string; disabled?: boolean }[];
   value: T;
   onChange: (next: T) => void;
   label: string;
@@ -110,6 +110,7 @@ export function SegmentedControl<T extends string>({
           type="button"
           className="segmented__option"
           aria-pressed={option.value === value}
+          disabled={option.disabled ?? false}
           onClick={() => onChange(option.value)}
         >
           {option.label}

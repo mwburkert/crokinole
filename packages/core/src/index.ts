@@ -7,6 +7,8 @@
  * instead.
  */
 
+export { MAX_NAME_LENGTH } from "./types.js";
+
 export type {
   Bet,
   DiscColor,
@@ -58,6 +60,7 @@ export {
   playersOnNight,
   shuffle,
   suggestSeating,
+  tiebreakRank,
 } from "./night.js";
 export type { NightHistory, Seating } from "./night.js";
 

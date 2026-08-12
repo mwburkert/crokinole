@@ -36,9 +36,16 @@ export interface Member {
   hasSignedIn: boolean;
 }
 
+/**
+ * In Convex this comes from the `SUPER_ADMIN_EMAIL` environment variable — not
+ * hardcoded, because this repo is public (§2.0). Fixtures need a value to
+ * demonstrate the locked row, so the placeholder lives here only.
+ */
+export const SUPER_ADMIN_EMAIL = "owner@example.com";
+
 export const MEMBERS: Member[] = [
   {
-    email: "mwburkert@gmail.com",
+    email: SUPER_ADMIN_EMAIL,
     role: "admin",
     invitedAt: Date.now() - 86_400_000 * 30,
     playerId: "p-mike",

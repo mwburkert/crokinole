@@ -7,19 +7,34 @@ type SortKey =
   | "displayName"
   | "gamesPlayed"
   | "gamesWon"
+  | "gamesLost"
   | "winPct"
   | "matchPointsFor"
+  | "matchPointsAgainst"
   | "roundPointsFor"
+  | "roundPointsAgainst"
+  | "pointsPerRound"
+  | "twenties"
+  | "twentiesPerGame"
   | "netCents";
 
-const COLUMNS: { key: SortKey; label: string; numeric: boolean }[] = [
-  { key: "displayName", label: "Player", numeric: false },
-  { key: "gamesPlayed", label: "GP", numeric: true },
-  { key: "gamesWon", label: "W", numeric: true },
-  { key: "winPct", label: "Win %", numeric: true },
-  { key: "matchPointsFor", label: "MP for", numeric: true },
-  { key: "roundPointsFor", label: "Pts for", numeric: true },
-  { key: "netCents", label: "Net", numeric: true },
+/**
+ * Name and Net are frozen to the left; everything else scrolls under them.
+ * The two things you're always comparing against stay on screen no matter how
+ * far right you go.
+ */
+const COLUMNS: { key: SortKey; label: string }[] = [
+  { key: "gamesPlayed", label: "GP" },
+  { key: "gamesWon", label: "W" },
+  { key: "gamesLost", label: "L" },
+  { key: "winPct", label: "Win %" },
+  { key: "matchPointsFor", label: "MP+" },
+  { key: "matchPointsAgainst", label: "MP−" },
+  { key: "roundPointsFor", label: "Pts+" },
+  { key: "roundPointsAgainst", label: "Pts−" },
+  { key: "pointsPerRound", label: "Pts/rd" },
+  { key: "twenties", label: "20s" },
+  { key: "twentiesPerGame", label: "20s/gm" },
 ];
 
 /**
@@ -33,14 +48,32 @@ export function StatsScreen(): ReactNode {
   const rows = useLeaderboard();
   const [sort, setSort] = useState<SortKey>("netCents");
 
-  const sorted = useMemo(() => {
-    const played = rows.filter((row) => row.gamesPlayed > 0);
-    return [...played].sort((a, b) =>
-      sort === "displayName"
-        ? a.displayName.localeCompare(b.displayName)
-        : Number(b[sort]) - Number(a[sort]),
-    );
-  }, [rows, sort]);
+  // Derived-on-read like everything else — these are folds over the same rows,
+  // never stored (§3.2.1).
+  const enriched = useMemo(
+    () =>
+      rows
+        .filter((row) => row.gamesPlayed > 0)
+        .map((row) => {
+          const roundsPlayed = row.matchPointsFor + row.matchPointsAgainst;
+          return {
+            ...row,
+            pointsPerRound: roundsPlayed > 0 ? row.roundPointsFor / (roundsPlayed / 2) : 0,
+            twentiesPerGame: row.gamesPlayed > 0 ? row.twenties / row.gamesPlayed : 0,
+          };
+        }),
+    [rows],
+  );
+
+  const sorted = useMemo(
+    () =>
+      [...enriched].sort((a, b) =>
+        sort === "displayName"
+          ? a.displayName.localeCompare(b.displayName)
+          : Number(b[sort]) - Number(a[sort]),
+      ),
+    [enriched, sort],
+  );
 
   if (sorted.length === 0) {
     return (
@@ -54,9 +87,15 @@ export function StatsScreen(): ReactNode {
     <div className="stack">
       <Card title="Lifetime">
         <div className="table-wrap">
-          <table className="table">
+          <table className="table table--frozen">
             <thead>
               <tr>
+                <th scope="col" className="col-name" onClick={() => setSort("displayName")}>
+                  Player
+                </th>
+                <th scope="col" className="col-net" onClick={() => setSort("netCents")}>
+                  Net
+                </th>
                 {COLUMNS.map((column) => (
                   <th
                     key={column.key}
@@ -72,23 +111,29 @@ export function StatsScreen(): ReactNode {
             <tbody>
               {sorted.map((row) => (
                 <tr key={row.playerId}>
-                  <td>{row.displayName}</td>
-                  <td className="num">{row.gamesPlayed}</td>
-                  <td className="num">{row.gamesWon}</td>
-                  <td className="num">{Math.round(row.winPct * 100)}%</td>
-                  <td className="num">{row.matchPointsFor}</td>
-                  <td className="num">{row.roundPointsFor}</td>
-                  <td>
+                  <td className="col-name name">{row.displayName}</td>
+                  <td className="col-net">
                     <Money cents={row.netCents} />
                   </td>
+                  <td className="num">{row.gamesPlayed}</td>
+                  <td className="num">{row.gamesWon}</td>
+                  <td className="num">{row.gamesLost}</td>
+                  <td className="num">{Math.round(row.winPct * 100)}%</td>
+                  <td className="num">{row.matchPointsFor}</td>
+                  <td className="num">{row.matchPointsAgainst}</td>
+                  <td className="num">{row.roundPointsFor}</td>
+                  <td className="num">{row.roundPointsAgainst}</td>
+                  <td className="num">{row.pointsPerRound.toFixed(1)}</td>
+                  <td className="num">{row.twenties}</td>
+                  <td className="num">{row.twentiesPerGame.toFixed(1)}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
         <p className="faint" style={{ marginBottom: 0 }}>
-          Tap a column to sort. Every figure is derived from the stored rounds — nothing here is
-          a saved total.
+          Scroll sideways for more. Name and Net stay put. Tap a column to sort — every figure is
+          derived from the stored rounds, nothing here is a saved total.
         </p>
       </Card>
     </div>

@@ -221,6 +221,25 @@ export function suggestSeating(
   return pool[Math.floor(random() * pool.length)] ?? pool[0] ?? null;
 }
 
+/**
+ * A stable pseudo-random rank for a player on a given night.
+ *
+ * Used as the last tiebreaker in the standings. It must not be `Math.random()`:
+ * a fresh value every render would make tied rows swap places while you look at
+ * them. Hashing id+night gives an arbitrary but *fixed* order that also differs
+ * from one night to the next, so the same two people don't always tie the same
+ * way.
+ */
+export function tiebreakRank(playerId: PlayerId, key: string): number {
+  let hash = 2166136261;
+  const input = `${playerId}@${key}`;
+  for (let i = 0; i < input.length; i += 1) {
+    hash ^= input.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0) / 0x100000000;
+}
+
 /** Shuffle in place-free fashion, for re-seating the same people. */
 export function shuffle<T>(items: T[], random: () => number = Math.random): T[] {
   const out = [...items];

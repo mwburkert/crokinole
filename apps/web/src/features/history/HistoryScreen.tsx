@@ -1,27 +1,34 @@
-import { gameStanding } from "@crokinole/core";
-import type { ReactNode } from "react";
-import { Link } from "react-router-dom";
+import {
+  formatCents,
+  gameStanding,
+  scoreRoundInput,
+  settle,
+  type GameWithRounds,
+  type TeamKey,
+} from "@crokinole/core";
+import { useState, type ReactNode } from "react";
 
 import { useNights, useStore } from "../../data/store";
-import { Badge, Card, Empty, Money } from "../../ui/components";
+import { Card, Empty, Money } from "../../ui/components";
 
 /**
  * History (§3.5), grouped by night.
  *
- * A night is the natural unit — five games in an evening — so the per-night
- * settlement total is shown alongside, and you settle once rather than per game
- * (§4.5.2, which the plan argues belongs in Phase 1 anyway).
+ * Each game reads as the two pairs stacked with the score between them —
+ * winner's total in green, loser's in red, both black on a tie. Tap to expand
+ * for the stakes and a round-by-round breakdown in the same colour language.
  */
 export function HistoryScreen(): ReactNode {
   const nights = useNights();
   const { players } = useStore();
+  const [expanded, setExpanded] = useState<string | null>(null);
 
   const nameOf = (id: string): string =>
     players.find((player) => player.id === id)?.displayName ?? "?";
 
   if (nights.length === 0) {
     return (
-      <Card title="History">
+      <Card>
         <Empty>Nothing logged yet.</Empty>
       </Card>
     );
@@ -38,51 +45,107 @@ export function HistoryScreen(): ReactNode {
             </span>
           </div>
 
-          {night.games.map((game) => {
-            const standing = gameStanding(game.rounds, game.config);
-            const winner = standing.winner;
-            return (
-              <Link className="game-row" to={`/games/${game.id}`} key={game.id}>
-                <div className="spread">
-                  <span>
-                    <span className={`disc disc--${game.teams.A.color}`} />{" "}
-                    {game.teams.A.playerIds.map(nameOf).join(" & ")}
-                  </span>
-                  <span className="game-row__score">
-                    {standing.matchPoints.A}–{standing.matchPoints.B}
-                  </span>
-                </div>
-                <div className="spread">
-                  <span>
-                    <span className={`disc disc--${game.teams.B.color}`} />{" "}
-                    {game.teams.B.playerIds.map(nameOf).join(" & ")}
-                  </span>
-                  {game.status === "in_progress" ? (
-                    <Badge live>In progress</Badge>
-                  ) : (
-                    <span className="faint">
-                      {winner ? `${game.teams[winner].playerIds.map(nameOf).join(" & ")} won` : ""}
-                    </span>
-                  )}
-                </div>
-              </Link>
-            );
-          })}
-
-          {night.settlement.length > 0 ? (
-            <Card title="Night total">
-              {night.settlement.map((entry) => (
-                <div className="spread" key={entry.playerId}>
-                  <span>{nameOf(entry.playerId)}</span>
-                  <Money cents={entry.netCents} />
-                </div>
-              ))}
-            </Card>
-          ) : null}
+          {night.games.map((game) => (
+            <GameRow
+              key={game.id}
+              game={game}
+              nameOf={nameOf}
+              open={expanded === game.id}
+              onToggle={() => setExpanded((current) => (current === game.id ? null : game.id))}
+            />
+          ))}
         </div>
       ))}
     </div>
   );
+}
+
+function GameRow({
+  game,
+  nameOf,
+  open,
+  onToggle,
+}: {
+  game: GameWithRounds;
+  nameOf: (id: string) => string;
+  open: boolean;
+  onToggle: () => void;
+}): ReactNode {
+  const standing = gameStanding(game.rounds, game.config);
+  const result = settle(game);
+  const netFor = (playerId: string): number =>
+    result.find((entry) => entry.playerId === playerId)?.netCents ?? 0;
+
+  /**
+   * Each side is its own two-column sub-grid: name, then money in a fixed
+   * column. Keeping the money out of the name text is what makes the four rows
+   * line up — inline, every row started at a different x depending on name
+   * length. Names ellipsise rather than wrap for the same reason.
+   */
+  const side = (team: TeamKey, mirrored: boolean): ReactNode => (
+    <div className={`matchup__side${mirrored ? " matchup__side--right" : ""}`}>
+      {game.teams[team].playerIds.map((id) => (
+        <div className="matchup__player" key={id}>
+          <span className="matchup__name">{nameOf(id)}</span>
+          <span className="matchup__money">
+            {result.length > 0 ? <Money cents={netFor(id)} /> : null}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+
+  return (
+    <div className="matchup">
+      <button type="button" className="matchup__main" onClick={onToggle} aria-expanded={open}>
+        {side("A", false)}
+        <span className="matchup__score">
+          <span className={`disc disc--${game.teams.A.color}`} aria-hidden="true" />
+          <span className={scoreClass(standing.matchPoints.A, standing.matchPoints.B)}>
+            {standing.matchPoints.A}
+          </span>
+          <span className="matchup__dash">–</span>
+          <span className={scoreClass(standing.matchPoints.B, standing.matchPoints.A)}>
+            {standing.matchPoints.B}
+          </span>
+          <span className={`disc disc--${game.teams.B.color}`} aria-hidden="true" />
+        </span>
+        {side("B", true)}
+      </button>
+
+      {open ? (
+        <div className="matchup__detail">
+          <div className="spread faint">
+            <span>Stakes</span>
+            <span>
+              {game.bets.map((bet) => `${nameOf(bet.playerId)} ${formatCents(bet.amountCents).replace("+", "")}`).join(" · ")}
+            </span>
+          </div>
+          {game.rounds.map((round) => {
+            const score = scoreRoundInput(round, game.config);
+            return (
+              <div className="spread" key={round.index}>
+                <span className="faint">Round {round.index + 1}</span>
+                <span className="num">
+                  <span className={scoreClass(score.aPoints, score.bPoints)}>{score.aPoints}</span>
+                  <span className="matchup__dash">–</span>
+                  <span className={scoreClass(score.bPoints, score.aPoints)}>{score.bPoints}</span>
+                </span>
+              </div>
+            );
+          })}
+          {game.rounds.length === 0 ? <p className="faint">No rounds yet.</p> : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/** Green when ahead, red when behind, plain when level. */
+function scoreClass(mine: number, theirs: number): string {
+  if (mine > theirs) return "num score--win";
+  if (mine < theirs) return "num score--loss";
+  return "num score--tie";
 }
 
 /** "2026-08-12" -> "Wed 12 Aug 2026". */

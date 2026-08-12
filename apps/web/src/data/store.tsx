@@ -15,6 +15,7 @@
 import {
   aggregateStats,
   configFor,
+  MAX_NAME_LENGTH,
   currentNightKey,
   gameStanding,
   groupByNight,
@@ -34,7 +35,15 @@ import {
   type ReactNode,
 } from "react";
 
-import { GAMES, MEMBERS, PLAYERS, type Member, type Player, type Role } from "./fixtures";
+import {
+  GAMES,
+  MEMBERS,
+  PLAYERS,
+  SUPER_ADMIN_EMAIL,
+  type Member,
+  type Player,
+  type Role,
+} from "./fixtures";
 
 export interface NewGameInput {
   format: Format;
@@ -70,9 +79,12 @@ interface StoreValue {
   /** The signed-in user. Fixtures assume the first admin; Convex uses the JWT. */
   currentEmail: string;
   isAdmin: boolean;
+  /** True for the one account other admins can't edit. */
+  isSuperAdmin: (email: string) => boolean;
   invite: (input: { email: string; displayName: string; role: Role }) => void;
   setRole: (email: string, role: Role) => void;
   revoke: (email: string) => void;
+  updateProfile: (email: string, changes: { displayName?: string; email?: string }) => void;
 }
 
 const StoreContext = createContext<StoreValue | null>(null);
@@ -161,13 +173,46 @@ export function StoreProvider({ children }: { children: ReactNode }): ReactNode 
     [currentEmail],
   );
 
+  const isSuperAdmin = useCallback(
+    (email: string): boolean => email.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase(),
+    [],
+  );
+
   const revoke = useCallback(
     (email: string): void => {
-      if (email === currentEmail) return;
+      if (email === currentEmail || isSuperAdmin(email)) return;
       // Removes permission, never the person — their history still scores.
       setMembers((current) => current.filter((member) => member.email !== email));
     },
-    [currentEmail],
+    [currentEmail, isSuperAdmin],
+  );
+
+  const updateProfile = useCallback(
+    (email: string, changes: { displayName?: string; email?: string }): void => {
+      if (isSuperAdmin(email) && !isSuperAdmin(currentEmail)) return;
+      const nextEmail = changes.email?.trim().toLowerCase();
+      const nextName = changes.displayName?.trim().slice(0, MAX_NAME_LENGTH);
+
+      setMembers((current) =>
+        current.map((member) =>
+          member.email === email
+            ? {
+                ...member,
+                ...(nextEmail ? { email: nextEmail } : {}),
+                ...(nextName ? { displayName: nextName } : {}),
+              }
+            : member,
+        ),
+      );
+      setPlayers((current) =>
+        current.map((player) => {
+          const member = members.find((m) => m.email === email);
+          if (!member || player.id !== member.playerId) return player;
+          return nextName ? { ...player, displayName: nextName, shortName: nextName } : player;
+        }),
+      );
+    },
+    [currentEmail, isSuperAdmin, members],
   );
 
   const createGame = useCallback((input: NewGameInput): string => {
@@ -240,13 +285,15 @@ export function StoreProvider({ children }: { children: ReactNode }): ReactNode 
     [games],
   );
 
-  // Before anyone is marked in, fall back to everyone — otherwise the very
-  // first game of a night would have nobody to pick from.
-  const availablePlayers = useMemo(() => {
-    const active = players.filter((player) => player.isActive);
-    if (presentIds.length === 0) return active;
-    return active.filter((player) => presentIds.includes(player.id));
-  }, [players, presentIds]);
+  /**
+   * Only people marked in tonight. No fallback to "everyone" — the new-game
+   * screen disables itself instead, which is honest about the fact that you
+   * haven't said who's here yet rather than quietly offering the wrong list.
+   */
+  const availablePlayers = useMemo(
+    () => players.filter((player) => player.isActive && presentIds.includes(player.id)),
+    [players, presentIds],
+  );
 
   const value = useMemo<StoreValue>(
     () => ({
@@ -263,9 +310,11 @@ export function StoreProvider({ children }: { children: ReactNode }): ReactNode 
       members,
       currentEmail,
       isAdmin,
+      isSuperAdmin,
       invite,
       setRole,
       revoke,
+      updateProfile,
     }),
     [
       players,
@@ -281,9 +330,11 @@ export function StoreProvider({ children }: { children: ReactNode }): ReactNode 
       members,
       currentEmail,
       isAdmin,
+      isSuperAdmin,
       invite,
       setRole,
       revoke,
+      updateProfile,
     ],
   );
 

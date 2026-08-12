@@ -7,7 +7,7 @@ import {
   type Format,
 } from "@crokinole/core";
 import { useMemo, useState, type ReactNode } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 
 import { useStore, useVisibleGames } from "../../data/store";
 import { Card, SegmentedControl } from "../../ui/components";
@@ -168,6 +168,24 @@ export function NewGameScreen(): ReactNode {
     );
   };
 
+  const here = availablePlayers.length;
+  const enoughForDoubles = here >= 4;
+  const enoughForSingles = here >= 2;
+
+  if (!enoughForSingles) {
+    return (
+      <Card title="Nobody's here yet">
+        <p style={{ marginTop: 0 }}>
+          Mark who's at the table on the <strong>Standings</strong> tab and the seats will fill
+          from that list.
+        </p>
+        <Link className="btn btn--accent btn--block btn--lg" to="/">
+          Mark who's here
+        </Link>
+      </Card>
+    );
+  }
+
   return (
     <div className="stack">
       <Card title="Format">
@@ -176,14 +194,21 @@ export function NewGameScreen(): ReactNode {
           value={format}
           onChange={(next) => setFormat(next)}
           options={[
-            { value: "doubles", label: "Doubles" },
+            { value: "doubles", label: "Doubles", disabled: !enoughForDoubles },
             { value: "singles", label: "Singles" },
           ]}
         />
+        {enoughForDoubles ? null : (
+          <p className="faint" style={{ margin: "0.5rem 0 0" }}>
+            Doubles needs four people here — {here} marked in.
+          </p>
+        )}
       </Card>
 
       <Card>
-        <div className={`table-layout${singles ? " table-layout--singles" : ""}`}>
+        {/* The grid is identical in both formats — singles simply leaves the
+            side seats empty, so the board never changes size when you toggle. */}
+        <div className="table-layout">
           {seatControl("top")}
           {singles ? null : seatControl("left")}
           <div className="table-layout__board">

@@ -13,6 +13,16 @@
 export type PlayerId = string;
 export type GameId = string;
 
+/**
+ * Longest display name we accept.
+ *
+ * Enforced at input rather than truncated at render, so a name is always shown
+ * in full at one consistent size. Every surface that lists names — standings,
+ * seat pickers, history — is width-constrained on a phone, and letting one long
+ * name shrink the type or ellipsise makes the whole table inconsistent.
+ */
+export const MAX_NAME_LENGTH = 12;
+
 /** 2v2 (6 discs each) or 1v1 (8 discs each). 3-player is out of scope. */
 export type Format = "doubles" | "singles";
 

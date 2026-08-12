@@ -5,56 +5,81 @@ import {
   nightBounds,
   nightsWithGames,
   playersOnNight,
+  tiebreakRank,
+  type PlayerStats,
 } from "@crokinole/core";
 import { useMemo, useState, type ReactNode } from "react";
-import { Link } from "react-router-dom";
 
 import { useStore, useVisibleGames } from "../../data/store";
 import { Card, Empty, Money } from "../../ui/components";
 
+interface Row extends PlayerStats {
+  displayName: string;
+  present: boolean;
+  /** Played tonight, whether or not they're still here. */
+  played: boolean;
+}
+
 /**
  * Daily standings (§3.5, route `/`).
  *
- * A "day" here runs to 3am, so a game logged at 1am still counts toward the
- * night it was played on and the board resets while everyone's asleep rather
- * than mid-evening.
+ * A "day" runs to 3am, so a game logged at 1am still counts toward the night it
+ * was played on.
  *
- * On tonight's page every player starts **greyed out**; tap to mark them in.
- * That set drives the standings *and* the seat pickers on the new-game screen,
- * so you're never scrolling past people who aren't at the table. Past nights
- * show only who actually played and can't be edited.
+ * Tap a row to mark someone in or out. That set drives the seat pickers on the
+ * new-game screen, so you're never scrolling past people who aren't at the
+ * table.
  */
 export function LeaderboardScreen(): ReactNode {
   const games = useVisibleGames();
   const { players, presentIds, togglePresent } = useStore();
+  const [showAbsent, setShowAbsent] = useState(true);
 
   const tonight = currentNightKey();
-  // Tonight is always page 0, even before a game exists on it.
   const nights = useMemo(() => {
     const withGames = nightsWithGames(games);
     return withGames[0] === tonight ? withGames : [tonight, ...withGames];
   }, [games, tonight]);
 
   const [index, setIndex] = useState(0);
-  const nightKeyViewed = nights[index] ?? tonight;
-  const isTonight = nightKeyViewed === tonight;
+  const viewing = nights[index] ?? tonight;
+  const isTonight = viewing === tonight;
 
-  const nightGames = useMemo(
-    () => gamesOnNight(games, nightKeyViewed),
-    [games, nightKeyViewed],
-  );
+  const nightGames = useMemo(() => gamesOnNight(games, viewing), [games, viewing]);
 
-  const rows = useMemo(() => {
-    const { since, until } = nightBounds(nightKeyViewed);
-    // Past nights list only who played. Tonight lists whoever is marked in, so
-    // people show up before their first game.
-    const include = isTonight ? presentIds : playersOnNight(games, nightKeyViewed);
-    const stats = aggregateStats(games, { since, until, includePlayerIds: include });
+  const rows = useMemo<Row[]>(() => {
+    const { since, until } = nightBounds(viewing);
+    const playedTonight = new Set(playersOnNight(games, viewing));
     const names = new Map(players.map((player) => [player.id, player.displayName]));
+
+    // Past nights list only who actually played. Tonight lists every active
+    // player so you can mark people in before their first game.
+    const candidates = isTonight
+      ? players.filter((player) => player.isActive).map((player) => player.id)
+      : [...playedTonight];
+
+    const stats = aggregateStats(games, {
+      since,
+      until,
+      includePlayerIds: candidates,
+    });
+
     return stats
-      .filter((row) => include.includes(row.playerId))
-      .map((row) => ({ ...row, displayName: names.get(row.playerId) ?? "Unknown" }));
-  }, [games, nightKeyViewed, isTonight, presentIds, players]);
+      .filter((row) => candidates.includes(row.playerId))
+      .map((row) => ({
+        ...row,
+        displayName: names.get(row.playerId) ?? "Unknown",
+        present: isTonight ? presentIds.includes(row.playerId) : true,
+        played: playedTonight.has(row.playerId),
+      }))
+      .sort(compare(viewing));
+  }, [games, viewing, isTonight, presentIds, players]);
+
+  // Someone who played and then went home still ranks on merit; only people who
+  // never played and aren't here drop to the bottom.
+  const ranked = rows.filter((row) => row.present || row.played);
+  const sittingOut = rows.filter((row) => !row.present && !row.played);
+  const visible = showAbsent ? [...ranked, ...sittingOut] : ranked;
 
   return (
     <div className="stack">
@@ -69,7 +94,7 @@ export function LeaderboardScreen(): ReactNode {
           ‹
         </button>
         <span className="daynav__label">
-          {isTonight ? "Tonight" : formatNight(nightKeyViewed)}
+          {isTonight ? "Tonight" : formatNight(viewing)}
           <span className="daynav__sub">
             {nightGames.length} {nightGames.length === 1 ? "game" : "games"}
           </span>
@@ -85,68 +110,73 @@ export function LeaderboardScreen(): ReactNode {
         </button>
       </div>
 
-      {isTonight ? (
-        <Card title="Who's here">
-          <div className="chips">
-            {players
-              .filter((player) => player.isActive)
-              .map((player) => (
-                <button
-                  key={player.id}
-                  type="button"
-                  className="chip"
-                  aria-pressed={presentIds.includes(player.id)}
-                  onClick={() => togglePresent(player.id)}
-                >
-                  {player.displayName}
-                </button>
-              ))}
-          </div>
-        </Card>
-      ) : null}
-
-      <Card title={isTonight ? "Tonight's standings" : "Standings that night"}>
-        {rows.length === 0 ? (
-          <Empty>
-            {isTonight ? "Tap whoever's here to start the night." : "Nobody played."}
-          </Empty>
+      <Card>
+        {visible.length === 0 ? (
+          <Empty>Nobody played.</Empty>
         ) : (
           <div className="table-wrap">
-            <table className="table">
+            <table className="table table--standings">
               <thead>
                 <tr>
                   <th scope="col">Player</th>
+                  <th scope="col">Net</th>
                   <th scope="col">GP</th>
                   <th scope="col">W</th>
                   <th scope="col">L</th>
-                  <th scope="col">Net</th>
                 </tr>
               </thead>
               <tbody>
-                {rows.map((row) => (
-                  <tr key={row.playerId}>
+                {visible.map((row) => (
+                  <tr
+                    key={row.playerId}
+                    className={row.present ? "" : "row--absent"}
+                    onClick={isTonight ? () => togglePresent(row.playerId) : undefined}
+                    style={isTonight ? { cursor: "pointer" } : undefined}
+                  >
                     <td>{row.displayName}</td>
-                    <td className="num">{row.gamesPlayed}</td>
-                    <td className="num">{row.gamesWon}</td>
-                    <td className="num">{row.gamesLost}</td>
                     <td>
                       <Money cents={row.netCents} />
                     </td>
+                    <td className="num">{row.gamesPlayed}</td>
+                    <td className="num">{row.gamesWon}</td>
+                    <td className="num">{row.gamesLost}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
         )}
-      </Card>
 
-      {isTonight ? (
-        <Link className="btn btn--accent btn--block btn--lg" to="/games/new">
-          New game
-        </Link>
-      ) : null}
+        {isTonight ? (
+          <>
+            <p className="faint" style={{ margin: "0.75rem 0 0.4rem" }}>
+              Tap a name to mark who's here. Only those players show up when you start a game.
+            </p>
+            <label className="toggle">
+              <input
+                type="checkbox"
+                checked={showAbsent}
+                onChange={(event) => setShowAbsent(event.target.checked)}
+              />
+              Show everyone else
+            </label>
+          </>
+        ) : null}
+      </Card>
     </div>
   );
+}
+
+/**
+ * Winnings first, then most wins, then fewest losses, then an arbitrary but
+ * stable order — see `tiebreakRank` for why it isn't `Math.random()`.
+ */
+function compare(nightKeyValue: string): (a: Row, b: Row) => number {
+  return (a, b) =>
+    b.netCents - a.netCents ||
+    b.gamesWon - a.gamesWon ||
+    a.gamesLost - b.gamesLost ||
+    tiebreakRank(a.playerId, nightKeyValue) - tiebreakRank(b.playerId, nightKeyValue);
 }
 
 /** "2026-08-12" -> "Wed 12 Aug". */
