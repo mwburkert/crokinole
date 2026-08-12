@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { NavLink, Route, Routes } from "react-router-dom";
 
-import { StoreProvider, useLiveGame, useStore } from "./data/store";
+import { StoreProvider, useLiveGame } from "./data/store";
 import { AdminScreen } from "./features/admin/AdminScreen";
 import { EntryScreen } from "./features/entry/EntryScreen";
 import { NewGameScreen } from "./features/entry/NewGameScreen";
@@ -49,30 +49,14 @@ function TabBar(): ReactNode {
         </span>
         Stats
       </NavLink>
+      {/* The gear used to live in a title bar that existed only to hold it. */}
+      <NavLink to="/admin" className="tabbar__link">
+        <span className="tabbar__glyph" aria-hidden="true">
+          ⚙
+        </span>
+        Settings
+      </NavLink>
     </nav>
-  );
-}
-
-function TopBar(): ReactNode {
-  const { isAdmin } = useStore();
-  return (
-    <header className="topbar">
-      <div className="topbar__inner">
-        <h1 className="topbar__title">
-          <span className="disc disc--black" aria-hidden="true" />
-          <span className="disc disc--white" aria-hidden="true" />
-          Crokinole
-        </h1>
-        {/* Kept out of the tab bar so the four thumb targets stay wide. */}
-        {isAdmin ? (
-          <NavLink to="/admin" className="topbar__admin" aria-label="Admin">
-            ⚙
-          </NavLink>
-        ) : (
-          <span className="topbar__meta">burkert.app</span>
-        )}
-      </div>
-    </header>
   );
 }
 
@@ -80,7 +64,6 @@ export function App(): ReactNode {
   return (
     <StoreProvider>
       <div className="app">
-        <TopBar />
         <main className="app__main">
           <Routes>
             <Route path="/" element={<LeaderboardScreen />} />

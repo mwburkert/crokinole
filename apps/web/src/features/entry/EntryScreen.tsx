@@ -48,6 +48,8 @@ export function EntryScreen(): ReactNode {
   const [editing, setEditing] = useState<number | null>(null);
   /** The scorecard is the moment the match ends; the settlement follows it. */
   const [cardDone, setCardDone] = useState(false);
+  /** Shown for a beat after each round so you see the match take shape. */
+  const [showCard, setShowCard] = useState(false);
 
   const game = gameId ? getGame(gameId) : undefined;
   if (!game) return <p className="empty">That game is gone.</p>;
@@ -111,6 +113,7 @@ export function EntryScreen(): ReactNode {
     if (!gameId) return;
     addRound(gameId, a, b);
     reset();
+    setShowCard(true);
   };
 
   /** Prompt before losing detail, per §3.5. */
@@ -184,6 +187,33 @@ export function EntryScreen(): ReactNode {
         <Link className="btn btn--block" to={`/games/${game.id}`}>
           See the detail
         </Link>
+      </div>
+    );
+  }
+
+  // The scorecard between rounds: the same sheet as the final one, showing the
+  // match so far. Replaces the board rather than overlaying it, so the moment
+  // has the screen to itself.
+  if (showCard) {
+    return (
+      <div className="stack">
+        <MatchScoreCard
+          rounds={game.rounds.map((round) => {
+            const score = scoreRoundInput(round, cfg);
+            return {
+              index: round.index,
+              aPoints: score.aPoints,
+              bPoints: score.bPoints,
+              result: score.result,
+            };
+          })}
+          teamAName={sideName("A")}
+          teamBName={sideName("B")}
+          matchPoints={standing.matchPoints}
+          colorA={colorA}
+          colorB={colorB}
+          onDone={() => setShowCard(false)}
+        />
       </div>
     );
   }
@@ -281,17 +311,6 @@ export function EntryScreen(): ReactNode {
           colorB={colorB}
         />
       )}
-
-      <div className="differential">
-        <div className="differential__value num">
-          {pending.differential === 0 ? "—" : Math.abs(pending.differential)}
-        </div>
-        <div className="differential__who">
-          {pending.result === "tie"
-            ? "level"
-            : `${sideName(pending.result)} by ${Math.abs(pending.differential)}`}
-        </div>
-      </div>
 
       {confirming ? (
         <div className="overlay" role="dialog" aria-label="Finish round">
