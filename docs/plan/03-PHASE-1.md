@@ -1,8 +1,8 @@
 # Section 3 — Phase 1: Build Now
 
 **Goal:** by the end of this phase, on any phone, you can record a night of crokinole in under
-a minute per game, see full history, see lifetime stats, and settle up the money — and a
-public leaderboard exists that anyone can view without logging in.
+a minute per game, see full history, see lifetime stats, and settle up the money. **The whole app
+is behind auth — there is no public route** (revised 2026-08-12, see §3.5).
 
 **Stack (locked):** Convex + React/Vite PWA + a pure-TS `packages/core` rules package,
 npm workspaces. Matches `oh-heck-chaos-monkey` so patterns transfer between your projects.
@@ -297,30 +297,36 @@ Phone-first, portrait, one-handed. Five routes.
 
 | Route | Auth | What it does |
 |---|---|---|
-| `/` | public | **Leaderboard.** Read-only standings — records and stats, **no money**. |
+| `/` | 🔒 | **Leaderboard.** Standings — records, stats, and earnings. |
 | `/games` | 🔒 | **History.** Date, teams/partners, final score, bet, winner. Tap to edit. |
 | `/games/new` | 🔒 | **Entry.** The screen that has to be fast. |
 | `/games/:id` | 🔒 | Detail + round-by-round + edit + soft-delete. |
 | `/stats` | 🔒 | Per-player lifetime stats, including earnings. |
 
-### ⚠️ Money is never public (Q6)
+### The whole app is gated — decided 2026-08-12
 
-Anonymous visitors see win/loss records and scoring stats. They must **never** see bet amounts,
-earnings, or settlements.
+The original plan made `/` a public leaderboard. **It is now behind auth like everything else.**
+That deletes work rather than adding it:
 
-Enforce this in the **query layer, not the UI**. Build two distinct queries:
+- **The two-query split is gone.** `publicLeaderboard` (no identity) and `fullStats`
+  (allowlisted) collapse into **one authenticated query**. The "enforce money in the query layer,
+  not the UI" rule was only load-bearing because anonymous readers existed; there is now no
+  audience to leak to, so earnings can simply be part of the one stats query.
+- **Q6 is moot.** Records-vs-money and public-vs-private are the same audience now.
+- **§7.4's SPA caveat disappears.** Path-based Access policies can't gate `/admin/*` reliably,
+  because client-side navigation makes no HTTP request. With the **whole hostname** gated there
+  is no path policy to defeat, and `/admin/token` can live anywhere.
+- **The egress blow-up vector is gone.** Anonymous spectators holding reactive subscriptions were
+  the only unbounded-audience surface. Usage can now only grow when you deliberately add someone
+  to the `Crokinole Players` Access Group.
 
-```ts
-// Public. Takes no identity. Physically cannot leak money — the fields aren't selected.
-export const publicLeaderboard = query({ ... });   // name, GP, W, L, win%, MP for/against
+**What it costs:** you can't show the app to anyone who isn't on the allowlist. That's ~30 seconds
+in the Zero Trust dashboard. Carving a public route back out later is easy; the reverse isn't.
 
-// Authenticated. assertAllowlisted() first.
-export const fullStats = query({ ... });           // everything above + earnings, bets
-```
-
-A UI-level `{isAuthed && <Earnings/>}` is **not** sufficient — the data would still be sent to
-the browser and visible in the network tab. Serving the fields at all is the leak. This is
-explicitly on QA agent H's checklist (§6.3).
+**Still non-negotiable:** every query and mutation calls `assertAllowlisted(ctx)`. Convex is a
+public internet endpoint regardless of what Cloudflare does (§3.2.5), and the check now also
+validates that the token's **AUD matches this app** (§7.1). QA agent H's checklist (§6.3) becomes
+simpler but no less important: confirm that **no** query serves data without identity.
 
 ### The entry screen — the one that matters
 
@@ -350,7 +356,8 @@ committing a round with a mis-tapped count.
 ### Stats (Phase 1 scope only)
 
 Per player: games played, won, lost, win %, match points for, match points against, and net
-earnings (**authenticated only** — see above). One sortable table.
+earnings. One sortable table, one query — the whole app is behind auth, so there is no
+public/private field split to maintain.
 
 Partner-based stats are Phase 2, and when they arrive they must **exclude singles games** —
 a 1v1 game has no partner. The richer stats need no migration, because the model stores counts.
@@ -376,15 +383,19 @@ export default {
 };
 ```
 
-- The `CF_Authorization` cookie is HttpOnly, so a small Pages Function at the **protected**
-  path `/admin/token` echoes `cf-access-jwt-assertion`; feed it to `convex.setAuth(fetchToken)`
-  and re-fetch on `forceRefreshToken` (default session 24h).
-- **Every mutation** begins with `assertAllowlisted(ctx)`: `ctx.auth.getUserIdentity()` →
-  `.email` → check the `allowlist` table → resolve to a `players` row. Non-negotiable, per
-  §3.2.5 — this is the *only* thing protecting your data.
-- Leaderboard queries take no identity and are safe to serve publicly.
-- Seeding: add the regulars' emails in the Convex dashboard. For 8 people, an admin UI is not
-  worth building in Phase 1.
+- `applicationID` must be **crokinole's own AUD tag**. There are three Access applications, one
+  per app, precisely so this check distinguishes them (§7.1). A single multi-domain application
+  would share one AUD and make per-app allowlists meaningless.
+- The `CF_Authorization` cookie is HttpOnly, so a small Pages Function at `/admin/token` echoes
+  `cf-access-jwt-assertion`; feed it to `convex.setAuth(fetchToken)` and re-fetch on
+  `forceRefreshToken` (default session 24h). The whole hostname is gated, so this path needs no
+  special treatment.
+- **Every query and mutation** begins with `assertAllowlisted(ctx)`: `ctx.auth.getUserIdentity()`
+  — which fails unless signature, issuer, **and AUD** all check out — then resolves `.email` to a
+  `players` row. Non-negotiable, per §3.2.5: this is the *only* thing protecting your data.
+- **No query serves data without identity.** There is no public route in Phase 1.
+- Membership lives in the **`Crokinole Players` Access Group**, not in a second email list here.
+  The `players` row establishes who someone is; `allowlist.role` decides what they may do.
 
 **This couples Phase 1 to §7.** The platform setup is ~2 hours and $14.20, so do it first. If
 you'd rather start coding immediately, keep `assertAllowlisted` as the single seam and stub it
@@ -423,7 +434,7 @@ Definitions of done are deliberately testable — they're what the QA agents in 
 | **T3** | App shell: routing, design tokens, layout, auth wiring | agent C | All five routes render behind correct auth; installable as a PWA |
 | **T4** | Entry screen (§3.5) | agent D | A full 3-round game can be entered in under 60s on a phone; undo works |
 | **T5** | History + game detail + edit + soft-delete | agent E | Edit a round → all derived totals and stats update with no stale reads |
-| **T6** | Stats + public leaderboard | agent F | Numbers reconcile with a hand-computed fixture; `/` loads signed-out |
+| **T6** | Stats + leaderboard | agent F | Numbers reconcile with a hand-computed fixture; every query rejects an unauthenticated caller and one carrying another app's AUD |
 | **T7** | Seed script + your real historical games | solo | Past games loaded, stats look right to you |
 
 **T1 is the critical path and must land first** — T4, T5, and T6 all import it.

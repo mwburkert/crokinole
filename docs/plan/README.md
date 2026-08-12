@@ -26,10 +26,16 @@ in-place.
 - **Repo:** `mwburkert/crokinole`, **public** — *not* `mwburkert-struct`, which is the active
   `gh` account and would silently claim it. (Public is readable, not writable; free private
   repos get no branch protection at all. §2.0)
-- **Platform:** **`burkert.app`** + one Cloudflare Access email allowlist. Apps deploy
-  independently at `crokinole.` / `meals.` / `ohheck.burkert.app`.
-- **Auth:** per-player identity, allowlisted writes. Leaderboard is publicly readable, but
-  **money is authenticated-only**, enforced in the query rather than the UI. (§3.5)
+- **Platform:** **`burkert.app`** + **three** Cloudflare Access applications, one per app —
+  separate allowlists, one login via the shared global session. Apps deploy independently at
+  `crokinole.` / `meals.` / `ohheck.burkert.app`. (§7.1)
+- **Hosting:** crokinole and oh-heck on **Cloudflare Workers static** (static requests are free
+  and unlimited — no ceiling at any scale); meal-planner on **Render** (Hobby workspace, Free
+  instance) with Vercel Hobby as the upgrade path. (§7.5)
+- **Database:** **Convex for all three.** Turso is dropped — meal-planner's `lib/db.ts` moves to
+  `ConvexHttpClient`. One platform, one dashboard, one free team. (§7.8)
+- **Auth:** per-player identity, allowlisted writes. **The whole app is gated — there is no
+  public route.** Every query and mutation validates signature, issuer, and this app's AUD. (§3.5)
 - **Money:** everyone pays in; winners take the whole pot and split it — evenly, or by stake
   when stakes differ. Equal $5 bets ⇒ **+$5 / −$5**. (§3.4)
 - **Formats:** doubles (6 discs/player, 12/team) primary; **singles (8/player) supported**.
@@ -67,12 +73,41 @@ Parallel research agents contradicted the initial spec in four places:
    rule needing ±0.03″) and the fact that **twenties fall in the hole and vanish**, so a single
    end-of-round photo cannot score the round. It needs stateful shot-by-shot diffing. (§5.0)
 
+## Five corrections made 2026-08-12
+
+Research into the meal-planner coordination question turned up four errors in the plan, and one
+decision was simplified. All are applied in-place:
+
+1. **Cloudflare Workers cannot host meal-planner.** §7.5 recommended moving it there to kill the
+   cold start. `anylist/lib/index.js` requires `got`, `reconnecting-websocket`, and `ws` at
+   module load, and Cloudflare's docs state the `ws` package is incompatible with the Workers
+   runtime. The bundle fails regardless of whether that code path runs. (§7.5)
+2. **One multi-domain Access application was the wrong boundary.** One application means one AUD
+   tag, and the AUD is what Convex validates — so a token issued for meal-planner would have been
+   valid at crokinole's backend. Three applications give per-app AUDs, and the global session
+   token preserves single sign-on anyway. (§7.1)
+3. **Turso is out; Convex is the database for all three.** meal-planner's storage is a single
+   `kv(key, value)` table of JSON blobs behind three functions — a document store wearing a SQL
+   costume. Also flagged: Render's ephemeral filesystem may be silently destroying its data
+   today. (§7.8)
+4. **The cost table was wrong** — Render free + Turso free became Render Free + Convex, and
+   static hosting has no ceiling at all. Still $14.20/yr. (§7.6)
+5. **The public leaderboard is gone; the whole app is gated.** This deletes the two-query split,
+   moots Q6, removes the SPA path-policy caveat, and eliminates the only way Convex usage could
+   grow without you adding someone deliberately. (§3.5)
+
 ## Sequencing
 
 ```
 all decisions closed (00-DECISIONS.md)
    │
-   ├─► §7 platform setup   (~2 hours, $14.20)  ─┐
+   ├─► §7 platform setup   (~2 hours, $14.20)  ─┐   ◀── IN FLIGHT 2026-08-12
+   │     domain · Zero Trust · 3 Groups         │
+   │     · 3 Access apps · SSL Full (strict)    │
+   │       │                                    │
+   │       └─► §7.8 meals → meals.burkert.app   │   ◀── un-deferred; proves
+   │             (Convex move lands first)      │       the pattern first
+   │                                            │
    └─► §1 Orca settings    (~15 min)            │
                                                  ▼
                             §3 Phase 1 build (§6 wave plan)
@@ -105,7 +140,14 @@ before the domain exists.
   the ruleset.
 - ⬜ Repo conventions not added: gitleaks pre-commit hook, PR template, `AGENTS.md`/`CLAUDE.md`
   (§2.5, §2.6). `.gitignore` **is** in place.
-- ⬜ Domain `burkert.app` not yet registered.
+- 🚨 **Unverified and urgent: is `DATABASE_URL` set in meal-planner's Render dashboard?** If not,
+  its SQLite file sits on Render's ephemeral filesystem and every pin, setting, saved plan, and
+  AI-usage counter is lost whenever the service sleeps. Check before anything else; the fix is
+  the Convex move. (§7.8)
+- 🔄 **§7 platform setup in flight as of 2026-08-12** — domain registration, Zero Trust team,
+  three Access Groups, three Access applications, and the `meals.burkert.app` cutover. The
+  meal-planner migration was **un-deferred** and now goes first, so it proves the pattern rather
+  than following crokinole onto it (00-DECISIONS §In flight).
 - ⬜ Orca settings not yet applied — see the §1.7 checklist. The Orca project must also be
   pointed at `C:\dev\crokinole`; it was previously pointed at an empty, non-git directory at
   `C:\Users\mwbur\orca\projects\crokinole`, which is why Orca reported "no main branch connected".

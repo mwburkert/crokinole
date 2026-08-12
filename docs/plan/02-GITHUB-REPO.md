@@ -24,8 +24,8 @@ Verified rather than assumed:
   **gitignored and has never been committed**. `git ls-files data/` returns nothing.
 - The only env file in its history is `.env.example`, containing placeholders
   (`your@email.com`, `choose-a-long-random-password`). No real credential is in git.
-- Crokinole's data will live in Convex; meal-planner's in Turso. Real secrets live in the
-  Render and Convex dashboards.
+- **All three apps' data will live in Convex** (revised 2026-08-12 — Turso is dropped). Real
+  secrets live in the Render and Convex dashboards, never in the repo.
 
 So "what we're eating, passwords, emails" is not exposed by repo visibility. It's a separate
 system, protected by §7's allowlist.
