@@ -1104,6 +1104,9 @@
   margin: 0 auto;
   display: block;
   touch-action: none; /* the board owns the gesture; the page must not scroll under it */
+  /* The lifted disc rides above the board's top edge, so it must be allowed to
+     draw outside the viewBox rather than be clipped by it. */
+  overflow: visible;
 }
 
 .scorer__ring {
@@ -1599,6 +1602,11 @@ html { scrollbar-width: none; }
    the gap above it, so the board looks centred in its own space. */
 .scorer {
   margin-top: 0.3rem;
+  /* Above the sticky score card (z-index 10) but below the overlays (40). A
+     disc lifted off the fingertip near the top of the board was sliding under
+     the score card — the one place you most need to see where it's going. */
+  position: relative;
+  z-index: 15;
 }
 
 .scorer + .btn--lg,
