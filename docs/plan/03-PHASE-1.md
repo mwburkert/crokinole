@@ -186,6 +186,12 @@ export default defineSchema({
 });
 ```
 
+> **⚠️ This snippet is out of date — corrected 2026-08-12 (second pass).** It is kept because the
+> *reasoning* below it still holds, but **`convex/schema.ts` is the source of truth** and it has
+> since gained: `rounds.discs` (the board scorer's stored positions, §3.5), `rounds.resultOverride`
+> (outcome known, points never recorded — how the 5 Aug night is stored), and `config.winBy`.
+> Read the real file before designing against this.
+
 **Why counts and not totals.** Entering `{twenties: 1, fifteens: 2, tens: 1}` instead of `60`
 takes the same number of taps in a good UI and unlocks every Phase 2 stat (average points per
 round, 20s leaderboards, ring distribution) for free. `pointsOverride` exists for the night
@@ -470,10 +476,18 @@ export default {
 - `applicationID` must be **crokinole's own AUD tag**. There are three Access applications, one
   per app, precisely so this check distinguishes them (§7.1). A single multi-domain application
   would share one AUD and make per-app allowlists meaningless.
-- The `CF_Authorization` cookie is HttpOnly, so a small Pages Function at `/admin/token` echoes
-  `cf-access-jwt-assertion`; feed it to `convex.setAuth(fetchToken)` and re-fetch on
+- The `CF_Authorization` cookie is HttpOnly, so a small endpoint at `/admin/token` echoes the
+  `Cf-Access-Jwt-Assertion` header; feed it to `convex.setAuth(fetchToken)` and re-fetch on
   `forceRefreshToken` (default session 24h). The whole hostname is gated, so this path needs no
   special treatment.
+  > **⚠️ Corrected 2026-08-12 (second pass): it is not a "Pages Function".** Pages Functions
+  > exist only on Cloudflare Pages, and §7.5 puts this app on **Workers static assets**. It must
+  > be a Worker `fetch` handler with `/admin/token` listed in `run_worker_first` — otherwise
+  > navigating to the URL in a browser returns `index.html` instead of the token, because
+  > navigation requests skip the Worker under SPA asset routing. Working config in §7.5a.
+  > ⚠️ **`identity.email` is not guaranteed** by Convex's `customJwt` path (§7.1a), and
+  > `assertAllowlisted` resolves the caller entirely by email. Verify empirically before
+  > trusting it — if it is absent, everyone is locked out at once.
 - **Every query and mutation** begins with `assertAllowlisted(ctx)`: `ctx.auth.getUserIdentity()`
   — which fails unless signature, issuer, **and AUD** all check out — then resolves `.email` to a
   `players` row. Non-negotiable, per §3.2.5: this is the *only* thing protecting your data.
@@ -513,7 +527,7 @@ Definitions of done are deliberately testable — they're what the QA agents in 
 | # | Task | Owner | DoD |
 |---|---|---|---|
 | **T0** | Repo scaffold: workspaces, TS strict, Vite, Convex init, CI green | solo | `npm ci && npm run typecheck && npm test` passes on a PR |
-| **T1** | `packages/core`: types, `DEFAULT_SCORING`, `roundPoints`, `scoreRound`, `gameStanding`, `settle`, validators | agent A | 100% branch coverage on scoring; includes the 3-round-minimum test and a property test that match points never exceed target+1 |
+| **T1** | `packages/core`: types, `DEFAULT_SCORING`, `roundPoints`, `scoreRound`, `gameStanding`, `settle`, validators | agent A | 100% branch coverage on scoring; includes the 3-round-minimum test and a property test that **a completed game is never level** (⚠️ see below) |
 | **T2** | `convex/schema.ts` + queries/mutations + `assertAllowlisted` | agent B | Schema deploys; a mutation called without auth throws; soft-delete hides from history but not from the DB |
 | **T3** | App shell: routing, design tokens, layout, auth wiring | agent C | All five routes render behind correct auth; installable as a PWA |
 | **T4** | Entry screen (§3.5) | agent D | A full 3-round game can be entered in under 60s on a phone; undo works |
@@ -522,6 +536,14 @@ Definitions of done are deliberately testable — they're what the QA agents in 
 | **T7** | Seed script + your real historical games | solo | Past games loaded, stats look right to you |
 
 **T1 is the critical path and must land first** — T4, T5, and T6 all import it.
+
+> **⚠️ Corrected 2026-08-12 (second pass).** T1's DoD used to require *"a property test that match
+> points never exceed target+1"*. **That property is false**, and §3.4's `winBy` subsection
+> already said so — with ties and a margin requirement a game can finish 7–5 or beyond. The
+> correction had been applied in §3.4 but **not here**, so the false assertion survived in the
+> one place an agent actually reads as its definition of done. The replacement invariant — *a
+> completed game is never level* — is the one that matters, because money is on the table. The
+> full invariant list is now in `docs/qa/WAVE-3-G-RULES-FUZZ.md`.
 
 ---
 

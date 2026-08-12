@@ -63,9 +63,21 @@ concurrently.
 Three agents, all **read-only**, all reporting rather than fixing. Separating find-from-fix is
 what stops an agent quietly "fixing" a test to make its own bug disappear.
 
+> ✅ **The full briefs are written and ready to fire — added 2026-08-12.** The table below is a
+> summary; the briefs are what you actually hand an agent.
+>
+> | Agent | Brief |
+> |---|---|
+> | **G** — rules fuzz | [`docs/qa/WAVE-3-G-RULES-FUZZ.md`](../qa/WAVE-3-G-RULES-FUZZ.md) |
+> | **H** — auth/security | [`docs/qa/WAVE-3-H-AUTH-SECURITY.md`](../qa/WAVE-3-H-AUTH-SECURITY.md) |
+> | **I** — reconciliation | [`docs/qa/WAVE-3-I-RECONCILIATION.md`](../qa/WAVE-3-I-RECONCILIATION.md) |
+>
+> **This wave has never run.** It is the gate between "the migration typechecks" and "the
+> migration is trusted", and it needs no owner input — see §8.1.
+
 | Agent | Job | Prompt shape |
 |---|---|---|
-| **G — rules fuzz** | Property-test `packages/core` against the spec prose in `03-PHASE-1.md` §3.4. Generate random legal boards; assert invariants (match points never exceed target+1; differential sign matches winner; totals ≤ `discsPerTeam × 20`). | "Find inputs where the engine disagrees with the spec. Report; do not fix." |
+| **G — rules fuzz** | Property-test `packages/core` against the spec prose in `03-PHASE-1.md` §3.4. Generate random legal boards; assert invariants (⚠️ **not** "match points never exceed target+1" — that property is false, see §3.4's `winBy` note; use *a completed game is never level*); differential sign matches winner; totals ≤ `maxRoundPoints(cfg)`. | "Find inputs where the engine disagrees with the spec. Report; do not fix." |
 | **H — auth/security** | Try to read or write without being on the allowlist. Confirm **every** query and mutation calls `assertAllowlisted` — there is no public route as of 2026-08-12, so *any* function that returns data to an unauthenticated caller is a bug. Also confirm a token carrying **another app's AUD** is rejected (§7.1). | "You are an attacker with a valid Convex client and no allowlist entry. Enumerate every function and dump the raw wire response of each. Anything that returns data is a finding." |
 | **I — reconciliation** | Hand-compute one full night of 5 games from a fixture, then compare against the app's stats output field by field. | "Compute independently first, then compare. Report every mismatch." |
 
