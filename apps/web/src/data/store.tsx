@@ -1,24 +1,24 @@
 /**
  * The data seam.
  *
- * Every screen talks to this hook and nothing else. Today it is backed by
- * in-memory fixtures; swapping the body for `useQuery`/`useMutation` against
- * Convex is the whole of the wiring job once `convex dev` has produced
- * `_generated` (§6.2 — agent C works against fixtures so backend and frontend
- * never block each other).
+ * Every screen talks to this hook and nothing else, which is what let the move
+ * off fixtures be a one-file change (§6.2). It mirrors the Convex function
+ * surface one-for-one:
+ *   games.list / games.create / games.addRound / games.removeLastRound /
+ *   games.softDelete / players.list / players.me / admin.*
  *
- * Deliberately mirrors the Convex function surface one-for-one:
- *   games.list / games.get / games.create / games.addRound /
- *   games.removeLastRound / games.softDelete / stats.leaderboard
+ * Derivation stays on this side of the seam. `stats.leaderboard` and
+ * `stats.nights` exist on the backend and are deliberately unused: they call
+ * the same `@crokinole/core` functions this file does, over games the screens
+ * are already subscribed to, so a second round trip would buy nothing but a
+ * chance for the two answers to disagree (§3.2.1, §3.2.2).
  */
 
 import {
   aggregateStats,
-  configFor,
-  MAX_NAME_LENGTH,
   currentNightKey,
-  gameStanding,
   groupByNight,
+  MAX_NAME_LENGTH,
   settle,
   type Format,
   type GameWithRounds,
@@ -26,6 +26,8 @@ import {
   type RingCounts,
   type Settlement,
 } from "@crokinole/core";
+import { useMutation, useQuery } from "convex/react";
+import type { FunctionReference } from "convex/server";
 import {
   createContext,
   useCallback,
@@ -35,15 +37,8 @@ import {
   type ReactNode,
 } from "react";
 
-import {
-  GAMES,
-  MEMBERS,
-  PLAYERS,
-  SUPER_ADMIN_EMAIL,
-  type Member,
-  type Player,
-  type Role,
-} from "./fixtures";
+import { api } from "../../../../convex/_generated/api";
+import type { Member, Player, Role } from "./fixtures";
 
 export interface NewGameInput {
   format: Format;
@@ -54,6 +49,87 @@ export interface NewGameInput {
   blackTeam: "A" | "B";
   betCentsByPlayer: Record<string, number>;
 }
+
+/*
+ * ---------------------------------------------------------------------------
+ * The backend surface, named once.
+ *
+ * `convex/_generated/api` is the `anyApi` fallback until someone runs
+ * `convex dev` against a real deployment: every path off it is `any`, and
+ * `noUncheckedIndexedAccess` widens that to `any | undefined`, which won't even
+ * index. Spelling out the handful of functions this file calls buys back the
+ * argument and result checking that would otherwise be silently absent — and
+ * documents exactly what the seam depends on. Delete the cast once codegen
+ * produces a typed `api`; the shapes below should then be redundant.
+ * ---------------------------------------------------------------------------
+ */
+
+type Q<Args extends Record<string, unknown>, Result> = FunctionReference<
+  "query",
+  "public",
+  Args,
+  Result
+>;
+type M<Args extends Record<string, unknown>, Result> = FunctionReference<
+  "mutation",
+  "public",
+  Args,
+  Result
+>;
+type NoArgs = Record<string, never>;
+
+/** `games.list` also returns standing and settlement; the seam derives those itself. */
+type GameRow = { game: GameWithRounds };
+
+type PlayerDoc = {
+  _id: string;
+  displayName: string;
+  shortName?: string;
+  isActive: boolean;
+  createdAt: number;
+};
+
+type MemberRow = {
+  email: string;
+  role: Role;
+  invitedAt: number;
+  playerId: string | null;
+  displayName: string | null;
+  hasSignedIn: boolean;
+  /** The owner's address is a Convex env var (§2.0), so only the server can say. */
+  isSuperAdmin: boolean;
+};
+
+type TeamArg = { color: "black" | "white"; playerIds: string[] };
+
+const fns = api as unknown as {
+  games: {
+    list: Q<{ limit?: number }, GameRow[]>;
+    create: M<
+      {
+        playedAt: number;
+        format: Format;
+        teams: { A: TeamArg; B: TeamArg };
+        bets: { playerId: string; amountCents: number }[];
+      },
+      string
+    >;
+    addRound: M<{ gameId: string; A: RingCounts; B: RingCounts }, unknown>;
+    removeLastRound: M<{ gameId: string }, null>;
+    softDelete: M<{ gameId: string }, null>;
+  };
+  players: {
+    list: Q<{ includeInactive?: boolean }, PlayerDoc[]>;
+    me: Q<NoArgs, { player: PlayerDoc; role: Role; email: string }>;
+  };
+  admin: {
+    listMembers: Q<NoArgs, MemberRow[]>;
+    invite: M<{ email: string; displayName: string; role: Role }, string>;
+    setRole: M<{ email: string; role: Role }, null>;
+    revoke: M<{ email: string }, null>;
+    updateProfile: M<{ playerId: string; displayName?: string; email?: string }, null>;
+  };
+};
 
 interface StoreValue {
   players: Player[];
@@ -78,7 +154,7 @@ interface StoreValue {
 
   // Admin — mirrors convex/admin.ts one-for-one.
   members: Member[];
-  /** The signed-in user. Fixtures assume the first admin; Convex uses the JWT. */
+  /** The signed-in user, from the Access JWT via players.me. */
   currentEmail: string;
   isAdmin: boolean;
   /** True for the one account other admins can't edit. */
@@ -91,57 +167,109 @@ interface StoreValue {
 
 const StoreContext = createContext<StoreValue | null>(null);
 
-let nextId = 1000;
-
 /**
- * ⚠️ TEMPORARY — survives a reload so the app is testable on a real phone.
+ * Fire a write and forget it.
  *
- * This is NOT the persistence design. Convex is the store (§6.2); this exists
- * only because the wiring isn't done and games vanishing on every refresh made
- * it impossible to play a night through. Delete this whole mechanism when
- * `store.tsx` moves onto Convex — do not build on it.
+ * The seam's mutations are `void` because the screens are — nobody awaits a
+ * round, they just watch the subscription catch up. A rejection still has to
+ * land somewhere, though: without this it surfaces as an unhandled rejection
+ * and a refused write (not allowlisted, game deleted under you) leaves no trace
+ * at all.
  */
-const SAVE_KEY = "crokinole:games:v1";
-
-function loadGames(): GameWithRounds[] {
-  try {
-    const raw = window.localStorage.getItem(SAVE_KEY);
-    if (!raw) return [...GAMES];
-    const parsed = JSON.parse(raw) as GameWithRounds[];
-    // Seed data is re-merged by id so a fixtures change still lands, and so a
-    // corrupt save can't wipe the real recorded night.
-    const saved = new Map(parsed.map((game) => [game.id, game]));
-    for (const game of GAMES) if (!saved.has(game.id)) saved.set(game.id, game);
-    return [...saved.values()];
-  } catch {
-    return [...GAMES];
-  }
+function fire(promise: Promise<unknown>): void {
+  void promise.catch((error: unknown) => {
+    console.error("Convex write failed", error);
+  });
 }
 
-export function StoreProvider({ children }: { children: ReactNode }): ReactNode {
-  const [games, setGamesRaw] = useState<GameWithRounds[]>(loadGames);
+/**
+ * `createGame` has to hand back an id synchronously — the new-game screen
+ * navigates with it — but Convex can only give one once the insert lands. So it
+ * returns a placeholder, and `resolveId` maps it to the real id when the
+ * mutation resolves. The colon guarantees no collision with a Convex id.
+ */
+const PENDING_PREFIX = "pending:";
+let pendingCount = 0;
 
-  const setGames = useCallback(
-    (update: (current: GameWithRounds[]) => GameWithRounds[]): void => {
-      setGamesRaw((current) => {
-        const next = update(current);
-        try {
-          window.localStorage.setItem(SAVE_KEY, JSON.stringify(next));
-        } catch {
-          // Quota or private mode — the session still works, it just won't survive.
-        }
-        return next;
-      });
-    },
-    [],
+export function StoreProvider({ children }: { children: ReactNode }): ReactNode {
+  const gameRows = useQuery(fns.games.list, {});
+  // Inactive players are included so a retired regular's name still resolves in
+  // history; `isActive` gates the pickers, not the lookups.
+  const playerDocs = useQuery(fns.players.list, { includeInactive: true });
+  const me = useQuery(fns.players.me, {});
+  const isAdmin = me?.role === "admin";
+  // listMembers throws for anyone but an admin, and a throwing query takes the
+  // whole app down from here — StoreProvider wraps every screen. "skip" holds
+  // the hook slot without opening the subscription.
+  const memberRows = useQuery(fns.admin.listMembers, isAdmin ? {} : "skip");
+
+  const createMutation = useMutation(fns.games.create);
+  const addRoundMutation = useMutation(fns.games.addRound);
+  const removeLastRoundMutation = useMutation(fns.games.removeLastRound);
+  const softDeleteMutation = useMutation(fns.games.softDelete);
+  const inviteMutation = useMutation(fns.admin.invite);
+  const setRoleMutation = useMutation(fns.admin.setRole);
+  const revokeMutation = useMutation(fns.admin.revoke);
+  const updateProfileMutation = useMutation(fns.admin.updateProfile);
+
+  /** Placeholder id → the real one, once `games.create` has answered. */
+  const [pendingIds, setPendingIds] = useState<ReadonlyMap<string, string>>(() => new Map());
+
+  // A loading query is `undefined`; the seam is arrays, so every screen sees an
+  // empty one for the first frame rather than a crash.
+  const games = useMemo(() => (gameRows ?? []).map((row) => row.game), [gameRows]);
+
+  const players = useMemo<Player[]>(
+    () =>
+      (playerDocs ?? []).map((doc) => ({
+        id: doc._id,
+        displayName: doc.displayName,
+        // Stored short names are optional; the tables that use them are not.
+        shortName: doc.shortName ?? doc.displayName,
+        isActive: doc.isActive,
+      })),
+    [playerDocs],
   );
-  const [members, setMembers] = useState<Member[]>(() => [...MEMBERS]);
-  const [players, setPlayers] = useState<Player[]>(() => [...PLAYERS]);
+
+  const currentEmail = me?.email ?? "";
+
+  /**
+   * The member list, or just you.
+   *
+   * `admin.listMembers` is admin-only, but two screens read `members` to answer
+   * "which player am I?" — the settings screen and history's can-I-delete-this
+   * check. A non-admin therefore gets a single row built from `players.me`,
+   * which is exactly the row they'd have seen in the full list.
+   */
+  const members = useMemo<Member[]>(() => {
+    if (memberRows) {
+      return memberRows.map((row) => ({
+        email: row.email,
+        role: row.role,
+        invitedAt: row.invitedAt,
+        playerId: row.playerId,
+        displayName: row.displayName,
+        hasSignedIn: row.hasSignedIn,
+      }));
+    }
+    if (!me) return [];
+    return [
+      {
+        email: me.email,
+        role: me.role,
+        invitedAt: me.player.createdAt,
+        playerId: me.player._id,
+        displayName: me.player.displayName,
+        hasSignedIn: true,
+      },
+    ];
+  }, [memberRows, me]);
 
   /**
    * Presence is stored against the night it belongs to, so it survives a reload
    * mid-evening but is simply absent once the night rolls over at 3am. No
-   * expiry job needed — a new night reads a key that was never written.
+   * expiry job needed — a new night reads a key that was never written. Kept on
+   * the device on purpose: who is at *this* table is not shared state.
    */
   const [presentIds, setPresentIds] = useState<string[]>(() => {
     try {
@@ -166,41 +294,32 @@ export function StoreProvider({ children }: { children: ReactNode }): ReactNode 
     });
   }, []);
 
-  // With Convex this comes from the Access JWT via players.me. In fixtures we
-  // assume you're the first admin so the screen is reachable.
-  const currentEmail = MEMBERS.find((member) => member.role === "admin")?.email ?? "";
-  const isAdmin = members.some(
-    (member) => member.email === currentEmail && member.role === "admin",
+  /**
+   * The super admin is identified by the server, never by a constant here — the
+   * address lives in a Convex env var because this repo is public (§2.0). A
+   * non-admin can't read the list, and gets `false`: they have no controls to
+   * hide either way.
+   */
+  const superAdmins = useMemo(
+    () => new Set((memberRows ?? []).filter((row) => row.isSuperAdmin).map((row) => row.email)),
+    [memberRows],
+  );
+
+  const isSuperAdmin = useCallback(
+    (email: string): boolean => superAdmins.has(email.trim().toLowerCase()),
+    [superAdmins],
   );
 
   const invite = useCallback(
     ({ email, displayName, role }: { email: string; displayName: string; role: Role }): void => {
       const normalised = email.trim().toLowerCase();
       const name = displayName.trim();
+      // The server rejects these too; catching them here keeps a half-filled
+      // form from turning into a console full of failed writes.
       if (!normalised.includes("@") || !name) return;
-
-      setMembers((current) => {
-        if (current.some((member) => member.email === normalised)) return current;
-        const playerId = `p-${name.toLowerCase().replace(/\W+/g, "-")}`;
-        setPlayers((existing) =>
-          existing.some((player) => player.id === playerId)
-            ? existing
-            : [...existing, { id: playerId, displayName: name, shortName: name, isActive: true }],
-        );
-        return [
-          ...current,
-          {
-            email: normalised,
-            role,
-            invitedAt: Date.now(),
-            playerId,
-            displayName: name,
-            hasSignedIn: false,
-          },
-        ];
-      });
+      fire(inviteMutation({ email: normalised, displayName: name, role }));
     },
-    [],
+    [inviteMutation],
   );
 
   const setRole = useCallback(
@@ -208,141 +327,160 @@ export function StoreProvider({ children }: { children: ReactNode }): ReactNode 
       // Never let the last admin demote themselves — unrecoverable without the
       // Convex dashboard.
       if (email === currentEmail && role !== "admin") return;
-      setMembers((current) =>
-        current.map((member) => (member.email === email ? { ...member, role } : member)),
-      );
+      fire(setRoleMutation({ email, role }));
     },
-    [currentEmail],
-  );
-
-  const isSuperAdmin = useCallback(
-    (email: string): boolean => email.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase(),
-    [],
+    [currentEmail, setRoleMutation],
   );
 
   const revoke = useCallback(
     (email: string): void => {
       if (email === currentEmail || isSuperAdmin(email)) return;
       // Removes permission, never the person — their history still scores.
-      setMembers((current) => current.filter((member) => member.email !== email));
+      fire(revokeMutation({ email }));
     },
-    [currentEmail, isSuperAdmin],
+    [currentEmail, isSuperAdmin, revokeMutation],
   );
 
   const updateProfile = useCallback(
     (email: string, changes: { displayName?: string; email?: string }): void => {
       if (isSuperAdmin(email) && !isSuperAdmin(currentEmail)) return;
+      // admin.updateProfile patches a player row, so the address the admin
+      // screen works in has to be turned back into the person behind it.
+      const playerId =
+        members.find((member) => member.email === email)?.playerId ??
+        (email === currentEmail ? me?.player._id : undefined);
+      if (!playerId) return;
+
       const nextEmail = changes.email?.trim().toLowerCase();
+      // Truncate rather than let the server throw: the name field is a text
+      // input and over-typing it shouldn't lose the edit.
       const nextName = changes.displayName?.trim().slice(0, MAX_NAME_LENGTH);
 
-      setMembers((current) =>
-        current.map((member) =>
-          member.email === email
-            ? {
-                ...member,
-                ...(nextEmail ? { email: nextEmail } : {}),
-                ...(nextName ? { displayName: nextName } : {}),
-              }
-            : member,
-        ),
-      );
-      setPlayers((current) =>
-        current.map((player) => {
-          const member = members.find((m) => m.email === email);
-          if (!member || player.id !== member.playerId) return player;
-          return nextName ? { ...player, displayName: nextName, shortName: nextName } : player;
+      fire(
+        updateProfileMutation({
+          playerId,
+          ...(nextName ? { displayName: nextName } : {}),
+          ...(nextEmail ? { email: nextEmail } : {}),
         }),
       );
     },
-    [currentEmail, isSuperAdmin, members],
+    [currentEmail, isSuperAdmin, me, members, updateProfileMutation],
   );
 
-  const createGame = useCallback((input: NewGameInput): string => {
-    const id = `g-${(nextId += 1)}`;
-    const config = configFor(input.format);
-    const playerIds = [...input.teamA, ...input.teamB];
+  /**
+   * Turn whatever id a screen is holding into one Convex will accept.
+   *
+   * Usually that's a pass-through. It matters only for the window after
+   * `createGame` — and after a reload on a URL that still carries a
+   * placeholder, where the mapping is gone: the open game is the one that
+   * placeholder was always pointing at, so falling back to it is what the URL
+   * meant.
+   */
+  const resolveId = useCallback(
+    (gameId: string): string | undefined => {
+      if (!gameId.startsWith(PENDING_PREFIX)) return gameId;
+      return (
+        pendingIds.get(gameId) ??
+        games.find((game) => game.status === "in_progress")?.id
+      );
+    },
+    [pendingIds, games],
+  );
 
-    setGames((current) => [
-      {
-        id,
-        playedAt: input.playedAt,
-        status: "in_progress",
-        config,
-        teams: {
-          A: {
-            color: input.blackTeam === "A" ? "black" : "white",
-            playerIds: input.teamA,
+  const createGame = useCallback(
+    (input: NewGameInput): string => {
+      const placeholder = `${PENDING_PREFIX}${(pendingCount += 1)}`;
+      const playerIds = [...input.teamA, ...input.teamB];
+
+      // The scoring config is snapshotted server-side from the format (§3.2.3);
+      // sending one from here would be a second place for the rules to live.
+      fire(
+        createMutation({
+          playedAt: input.playedAt,
+          format: input.format,
+          teams: {
+            A: {
+              color: input.blackTeam === "A" ? "black" : "white",
+              playerIds: input.teamA,
+            },
+            B: {
+              color: input.blackTeam === "B" ? "black" : "white",
+              playerIds: input.teamB,
+            },
           },
-          B: {
-            color: input.blackTeam === "B" ? "black" : "white",
-            playerIds: input.teamB,
-          },
-        },
-        bets: playerIds.map((playerId) => ({
-          playerId,
-          amountCents: input.betCentsByPlayer[playerId] ?? 0,
-        })),
-        rounds: [],
-      },
-      ...current,
-    ]);
-    return id;
-  }, []);
-
-  const addRound = useCallback((gameId: string, a: RingCounts, b: RingCounts): void => {
-    setGames((current) =>
-      current.map((game) => {
-        if (game.id !== gameId) return game;
-        const rounds = [...game.rounds, { index: game.rounds.length, A: a, B: b }];
-        // Completion is derived, never decided by the UI (§3.5).
-        const status = gameStanding(rounds, game.config).isComplete ? "final" : "in_progress";
-        return { ...game, rounds, status };
-      }),
-    );
-  }, []);
-
-  const updateRound = useCallback(
-    (gameId: string, index: number, a: RingCounts, b: RingCounts): void => {
-      setGames((current) =>
-        current.map((game) => {
-          if (game.id !== gameId) return game;
-          const rounds = game.rounds.map((round) =>
-            round.index === index ? { ...round, A: a, B: b } : round,
-          );
-          // A correction can un-finish a game as easily as finish one, so status
-          // is recomputed rather than left alone.
-          const status = gameStanding(rounds, game.config).isComplete ? "final" : "in_progress";
-          return { ...game, rounds, status };
+          bets: playerIds.map((playerId) => ({
+            playerId,
+            amountCents: input.betCentsByPlayer[playerId] ?? 0,
+          })),
+        }).then((gameId) => {
+          setPendingIds((current) => new Map(current).set(placeholder, gameId));
         }),
+      );
+
+      return placeholder;
+    },
+    [createMutation],
+  );
+
+  const addRound = useCallback(
+    (gameId: string, a: RingCounts, b: RingCounts): void => {
+      const id = resolveId(gameId);
+      if (!id) return;
+      // Completion is derived, never decided by the UI (§3.5) — the mutation
+      // flips the game to `final` itself and the subscription reports it back.
+      fire(addRoundMutation({ gameId: id, A: a, B: b }));
+    },
+    [addRoundMutation, resolveId],
+  );
+
+  /**
+   * ⚠️ Not wired, and it can't be from here.
+   *
+   * `games.updateRound` is keyed by `roundId`, and nothing exposes one:
+   * `games.list` and `games.get` both hand back core's `Round`, which carries
+   * an index and no id. The seam only ever has (gameId, index). This needs
+   * either `games.updateRound` to accept those, or the read side to surface
+   * round ids — a `convex/` change, which is not this agent's to make.
+   *
+   * It throws rather than no-ops on purpose: a correction that silently
+   * evaporates leaves a wrong score standing, and the night settles off these
+   * numbers.
+   */
+  const updateRound = useCallback(
+    (gameId: string, index: number, _a: RingCounts, _b: RingCounts): void => {
+      throw new Error(
+        `Can't correct round ${index + 1} of ${gameId}: games.updateRound takes a roundId, ` +
+          `which no query returns. Backend change needed.`,
       );
     },
     [],
   );
 
-  const removeLastRound = useCallback((gameId: string): void => {
-    setGames((current) =>
-      current.map((game) => {
-        if (game.id !== gameId || game.rounds.length === 0) return game;
-        const rounds = game.rounds.slice(0, -1);
-        const status = gameStanding(rounds, game.config).isComplete ? "final" : "in_progress";
-        return { ...game, rounds, status };
-      }),
-    );
-  }, []);
+  const removeLastRound = useCallback(
+    (gameId: string): void => {
+      const id = resolveId(gameId);
+      if (!id) return;
+      fire(removeLastRoundMutation({ gameId: id }));
+    },
+    [removeLastRoundMutation, resolveId],
+  );
 
-  const softDelete = useCallback((gameId: string): void => {
-    // Soft delete only (§3.2.4) — the row stays, history hides it.
-    setGames((current) =>
-      current.map((game) =>
-        game.id === gameId ? { ...game, deletedAt: Date.now() } : game,
-      ),
-    );
-  }, []);
+  const softDelete = useCallback(
+    (gameId: string): void => {
+      const id = resolveId(gameId);
+      if (!id) return;
+      // Soft delete only (§3.2.4) — the row stays, `games.list` stops returning it.
+      fire(softDeleteMutation({ gameId: id }));
+    },
+    [resolveId, softDeleteMutation],
+  );
 
   const getGame = useCallback(
-    (gameId: string): GameWithRounds | undefined =>
-      games.find((game) => game.id === gameId),
-    [games],
+    (gameId: string): GameWithRounds | undefined => {
+      const id = resolveId(gameId);
+      return id === undefined ? undefined : games.find((game) => game.id === id);
+    },
+    [games, resolveId],
   );
 
   /**
