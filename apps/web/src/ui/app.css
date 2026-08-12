@@ -1066,6 +1066,23 @@
 
 /* ── Board scorer ────────────────────────────────────────────────────────── */
 
+/*
+ * Nothing in the scorer is selectable text.
+ *
+ * A press-and-hold is our grab gesture, and it's also the OS gesture for "start
+ * selecting" and "show the callout menu". Left alone, holding a pile put a
+ * selection highlight over the disc counts and popped a system menu mid-drag.
+ * -webkit-touch-callout and -webkit-user-select are both required — the
+ * standard property alone doesn't stop the callout on iOS.
+ */
+.scorer,
+.scorer * {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
 .scorer {
   position: relative;
 }
@@ -1078,7 +1095,6 @@
   margin: 0 auto;
   display: block;
   touch-action: none; /* the board owns the gesture; the page must not scroll under it */
-  user-select: none;
 }
 
 .scorer__ring {
