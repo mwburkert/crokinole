@@ -267,9 +267,9 @@
 }
 
 .bet-row {
-  display: grid;
-  grid-template-columns: auto auto 1fr;
+  display: flex;
   align-items: center;
+  justify-content: center;
   gap: var(--gap-sm);
 }
 
@@ -283,6 +283,7 @@
 
 .bet-row__input {
   min-height: var(--tap);
+  padding: 0 var(--gap-sm);
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: var(--bg);
@@ -291,7 +292,7 @@
   font-size: 1.35rem;
   font-weight: 700;
   text-align: center;
-  width: 100%;
+  /* Width comes from the value's length — see NewGameScreen. */
 }
 
 /* ── Bottom nav ──────────────────────────────────────────────────────────── */

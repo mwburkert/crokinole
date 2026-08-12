@@ -269,6 +269,10 @@ export function NewGameScreen(): ReactNode {
             className="bet-row__input"
             inputMode="decimal"
             value={betDollars}
+            // Sized to its contents with a three-digit floor, so a $1 bet
+            // doesn't sit in a field wide enough for a mortgage but a longer
+            // number still fits without clipping.
+            style={{ width: `${Math.max(3, betDollars.length)}ch` }}
             onChange={(event) => setBetDollars(event.target.value)}
             aria-label="Bet per player in dollars"
           />
