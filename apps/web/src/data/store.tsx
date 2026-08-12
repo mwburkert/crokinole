@@ -61,6 +61,8 @@ interface StoreValue {
   createGame: (input: NewGameInput) => string;
   addRound: (gameId: string, a: RingCounts, b: RingCounts) => void;
   removeLastRound: (gameId: string) => void;
+  /** Correct a round already committed. Completion is re-derived from scratch. */
+  updateRound: (gameId: string, index: number, a: RingCounts, b: RingCounts) => void;
   softDelete: (gameId: string) => void;
   getGame: (gameId: string) => GameWithRounds | undefined;
 
@@ -259,6 +261,24 @@ export function StoreProvider({ children }: { children: ReactNode }): ReactNode 
     );
   }, []);
 
+  const updateRound = useCallback(
+    (gameId: string, index: number, a: RingCounts, b: RingCounts): void => {
+      setGames((current) =>
+        current.map((game) => {
+          if (game.id !== gameId) return game;
+          const rounds = game.rounds.map((round) =>
+            round.index === index ? { ...round, A: a, B: b } : round,
+          );
+          // A correction can un-finish a game as easily as finish one, so status
+          // is recomputed rather than left alone.
+          const status = gameStanding(rounds, game.config).isComplete ? "final" : "in_progress";
+          return { ...game, rounds, status };
+        }),
+      );
+    },
+    [],
+  );
+
   const removeLastRound = useCallback((gameId: string): void => {
     setGames((current) =>
       current.map((game) => {
@@ -302,6 +322,7 @@ export function StoreProvider({ children }: { children: ReactNode }): ReactNode 
       createGame,
       addRound,
       removeLastRound,
+      updateRound,
       softDelete,
       getGame,
       presentIds,
@@ -322,6 +343,7 @@ export function StoreProvider({ children }: { children: ReactNode }): ReactNode 
       createGame,
       addRound,
       removeLastRound,
+      updateRound,
       softDelete,
       getGame,
       presentIds,

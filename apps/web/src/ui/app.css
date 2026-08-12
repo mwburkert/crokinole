@@ -1371,3 +1371,25 @@ html { scrollbar-width: none; }
 .matchup--unfinished .matchup__score {
   opacity: 0.65;
 }
+
+/* Match score and target flank the score cards on one line above them. */
+.scorecontext {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--gap-sm);
+  padding: 0 0.15rem 0.3rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: var(--ink-faint);
+}
+
+.matchscore__dash { padding: 0 2px; }
+
+/* The controls under Finish round are secondary — they don't need full height. */
+.row--tools .btn {
+  min-height: 2.4rem;
+  padding: 0 var(--gap);
+  flex: 1;
+}

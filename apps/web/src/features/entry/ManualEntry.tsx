@@ -13,12 +13,33 @@ const RINGS: { key: keyof RingCounts; label: string }[] = [
   { key: "fives", label: "5" },
 ];
 
+export interface ManualEntryProps {
+  config: ScoringConfig;
+  a: RingCounts;
+  b: RingCounts;
+  /** `totals` set means score-only: no section detail, so no board placement. */
+  onApply: (next: { a: RingCounts; b: RingCounts } | { totals: { a: number; b: number } }) => void;
+  onClose: () => void;
+
+  /** 0-based index being edited. Equals `roundCount` when it's the live round. */
+  roundIndex: number;
+  /** How many rounds are already committed. */
+  roundCount: number;
+  /** Ask the parent to switch which round is loaded into `a` / `b`. */
+  onNavigate: (index: number) => void;
+}
+
 /**
  * Manual scoring, behind the three-dot menu above the scoreboard (§3.5).
  *
  * Two ways in: per-section counts, or a straight total for logging a round
  * without detail. Section counts entered here **populate the board** when the
  * menu closes — the two views are the same data, not two records.
+ *
+ * It doubles as the scoreboard's back-catalogue: page back through committed
+ * rounds to fix one that was typed wrong, then page forward to the live round.
+ * The board behind the overlay stays on the live round throughout — only this
+ * sheet moves, so a correction never disturbs the round in play.
  */
 export function ManualEntry({
   config,
@@ -26,19 +47,35 @@ export function ManualEntry({
   b,
   onApply,
   onClose,
-}: {
-  config: ScoringConfig;
-  a: RingCounts;
-  b: RingCounts;
-  /** `totals` set means score-only: no section detail, so no board placement. */
-  onApply: (next: { a: RingCounts; b: RingCounts } | { totals: { a: number; b: number } }) => void;
-  onClose: () => void;
-}): ReactNode {
+  roundIndex,
+  roundCount,
+  onNavigate,
+}: ManualEntryProps): ReactNode {
   const [draftA, setDraftA] = useState<RingCounts>({ ...a });
   const [draftB, setDraftB] = useState<RingCounts>({ ...b });
   const [totalA, setTotalA] = useState("");
   const [totalB, setTotalB] = useState("");
+  /** Which round the draft above was seeded from — see the re-seed below. */
+  const [loadedRound, setLoadedRound] = useState(roundIndex);
 
+  // `useState` reads its initial value ONCE, so a new `a`/`b` arriving because
+  // the user paged to another round would be ignored and the draft would still
+  // hold the old round's counts — Apply would then write round 3's numbers into
+  // round 1, silently. Re-seeding during render (rather than in an effect) is
+  // the supported way to reset state on a prop change: React re-runs the
+  // component before painting, so paging never flashes the previous round's
+  // numbers. The totals fields reset too, or a total typed on one round would
+  // be applied to another in place of its section counts.
+  if (loadedRound !== roundIndex) {
+    setLoadedRound(roundIndex);
+    setDraftA({ ...a });
+    setDraftB({ ...b });
+    setTotalA("");
+    setTotalB("");
+  }
+
+  /** The live round sits one past the committed ones; everything below is history. */
+  const isLive = roundIndex === roundCount;
   const budget = discsPerTeam(config);
   const usingTotals = totalA !== "" || totalB !== "";
 
@@ -86,6 +123,52 @@ export function ManualEntry({
 
   return (
     <div className="manual">
+      {/* Which round you're editing has to be unmissable: the columns look
+          identical whichever round is loaded, and the cost of not noticing is
+          overwriting a committed score. */}
+      <div className="spread" style={{ marginBottom: "0.5rem" }}>
+        <button
+          type="button"
+          className="btn btn--ghost"
+          aria-label="Previous round"
+          disabled={roundIndex === 0}
+          onClick={() => onNavigate(roundIndex - 1)}
+        >
+          ←
+        </button>
+
+        {/* Announced, because paging changes the numbers below without moving focus. */}
+        <div style={{ textAlign: "center" }} aria-live="polite">
+          <div className="manual__head" style={{ fontSize: "1rem", marginBottom: "0.1rem" }}>
+            Round {roundIndex + 1}
+          </div>
+          {isLive ? (
+            <span className="faint">in play</span>
+          ) : (
+            <span
+              className="faint"
+              style={{
+                border: "1px solid currentColor",
+                borderRadius: "0.4rem",
+                padding: "0 0.35rem",
+              }}
+            >
+              committed
+            </span>
+          )}
+        </div>
+
+        <button
+          type="button"
+          className="btn btn--ghost"
+          aria-label="Next round"
+          disabled={isLive}
+          onClick={() => onNavigate(roundIndex + 1)}
+        >
+          →
+        </button>
+      </div>
+
       <div className="manual__cols">
         {column("Black", draftA, setDraftA)}
         {column("White", draftB, setDraftB)}
@@ -118,6 +201,8 @@ export function ManualEntry({
           type="button"
           className="btn btn--accent"
           onClick={() => {
+            // Same payload either way — which round it lands on is the parent's
+            // business, and it already knows from the index it navigated to.
             if (usingTotals) {
               onApply({
                 totals: {
@@ -131,7 +216,7 @@ export function ManualEntry({
             onClose();
           }}
         >
-          Apply
+          {isLive ? "Apply" : `Save round ${roundIndex + 1}`}
         </button>
         <button type="button" className="btn btn--ghost" onClick={onClose}>
           Cancel

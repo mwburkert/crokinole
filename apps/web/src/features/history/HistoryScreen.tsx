@@ -21,7 +21,10 @@ import { Badge, Card, Empty, Money } from "../../ui/components";
  */
 export function HistoryScreen(): ReactNode {
   const nights = useNights();
-  const { players } = useStore();
+  const { players, softDelete, currentEmail, isSuperAdmin, members } = useStore();
+
+  // Who am I, as a player id — so a game can tell whether I was in it.
+  const myPlayerId = members.find((member) => member.email === currentEmail)?.playerId ?? null;
   const [expanded, setExpanded] = useState<string | null>(null);
 
   const nameOf = (id: string): string =>
@@ -51,6 +54,12 @@ export function HistoryScreen(): ReactNode {
               key={game.id}
               game={game}
               nameOf={nameOf}
+              canManage={
+                isSuperAdmin(currentEmail) ||
+                (myPlayerId !== null &&
+                  [...game.teams.A.playerIds, ...game.teams.B.playerIds].includes(myPlayerId))
+              }
+              onDelete={() => softDelete(game.id)}
               open={expanded === game.id}
               onToggle={() => setExpanded((current) => (current === game.id ? null : game.id))}
             />
@@ -64,11 +73,16 @@ export function HistoryScreen(): ReactNode {
 function GameRow({
   game,
   nameOf,
+  canManage,
+  onDelete,
   open,
   onToggle,
 }: {
   game: GameWithRounds;
   nameOf: (id: string) => string;
+  /** Super admins, and anyone who actually played in this game. */
+  canManage: boolean;
+  onDelete: () => void;
   open: boolean;
   onToggle: () => void;
 }): ReactNode {
@@ -121,9 +135,19 @@ function GameRow({
           {unfinished ? (
             <div className="spread" style={{ marginBottom: "0.5rem" }}>
               <Badge live>Unfinished</Badge>
-              <Link className="btn btn--accent" to={`/games/${game.id}/play`}>
-                Resume
-              </Link>
+              {/* Abandoned games are only the business of the people who were in
+                  them — anyone else seeing a Delete button on someone else's
+                  night is an invitation to a mistake. */}
+              {canManage ? (
+                <span className="row" style={{ gap: "0.4rem" }}>
+                  <Link className="btn btn--accent" to={`/games/${game.id}/play`}>
+                    Resume
+                  </Link>
+                  <button type="button" className="btn btn--ghost" onClick={onDelete}>
+                    Delete
+                  </button>
+                </span>
+              ) : null}
             </div>
           ) : null}
           <div className="spread faint">

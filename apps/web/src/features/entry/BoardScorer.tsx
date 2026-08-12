@@ -143,7 +143,10 @@ export function BoardScorer({
     const svg = svgRef.current;
     if (!svg) return null;
     const rect = svg.getBoundingClientRect();
-    const scale = VIEW / rect.width;
+    // The viewBox is 200 units WIDE (VIEW is its height). Scaling by the height
+    // put every pointer position 21% off — far enough that a grabbed disc
+    // appeared to lag the finger and a press on a disc often missed it entirely.
+    const scale = 200 / rect.width;
     return {
       x: (event.clientX - rect.left) * scale,
       y: (event.clientY - rect.top) * scale - BOARD_TOP,
@@ -314,8 +317,8 @@ export function BoardScorer({
 
         {/* Twenties, laid out in a row directly under each score card so the
             two sides read at a glance without anyone counting a number. */}
-        <Stash x={16} color={colorA} count={twentiesOf(colorA)} onDown={handleDown} />
-        <Stash x={184} color={colorB} count={twentiesOf(colorB)} onDown={handleDown} rightAligned />
+        <Stash x={7} color={colorA} count={twentiesOf(colorA)} onDown={handleDown} />
+        <Stash x={193} color={colorB} count={twentiesOf(colorB)} onDown={handleDown} rightAligned />
 
         {/* One pile per colour: tap selects, hold-and-drag takes a disc. */}
         {PILES.map((pile, index) => {
@@ -502,15 +505,6 @@ function Stash({
       onPointerDown={(event) => onDown(event, { kind: "stash", color }, color)}
       aria-label={`${count} twenties`}
     >
-      {/* An always-present slot so the row is findable when it's empty. */}
-      <rect
-        x={rightAligned ? x - 6 * step - 3 : x - 3}
-        y={12}
-        width={6 * step + 6}
-        height={16}
-        rx={8}
-        className="scorer__stashslot"
-      />
       {Array.from({ length: count }, (_, index) => (
         <circle
           key={index}

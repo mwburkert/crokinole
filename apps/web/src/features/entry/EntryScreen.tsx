@@ -30,7 +30,7 @@ import { ManualEntry } from "./ManualEntry";
 export function EntryScreen(): ReactNode {
   const { gameId } = useParams();
   const navigate = useNavigate();
-  const { getGame, addRound, players } = useStore();
+  const { getGame, addRound, updateRound, players } = useStore();
 
   /** Positions are the source of truth; counts are derived from them (§3.5). */
   const [discs, setDiscs] = useState<PlacedDisc[]>([]);
@@ -42,6 +42,8 @@ export function EntryScreen(): ReactNode {
   /** Placement history for undo/redo. Rounds already committed use their own undo. */
   const [past, setPast] = useState<PlacedDisc[][]>([]);
   const [future, setFuture] = useState<PlacedDisc[][]>([]);
+  /** Which round the scoreboard overlay is showing. `null` = the live one. */
+  const [editing, setEditing] = useState<number | null>(null);
 
   const game = gameId ? getGame(gameId) : undefined;
   if (!game) return <p className="empty">That game is gone.</p>;
@@ -159,8 +161,17 @@ export function EntryScreen(): ReactNode {
 
   return (
     <div>
-      {/* The round score leads — it's what people call out mid-round. The match
-          score is context, so it sits underneath in subtext. */}
+      {/* The round score leads — it's what people call out mid-round. Match
+          score and target are context, so they sit above it on one line. */}
+      <div className="scorecontext">
+        <span>
+          Match Score: <span className="num">{standing.matchPoints.A}</span>
+          <span className="matchscore__dash">–</span>
+          <span className="num">{standing.matchPoints.B}</span>
+        </span>
+        <span>Game to {cfg.targetMatchPoints}</span>
+      </div>
+
       <div className="scoreline">
         <div className={`scoreline__side scoreline__side--${colorA}`}>
           <span className="scoreline__mp num">{pending.aPoints}</span>
@@ -186,21 +197,26 @@ export function EntryScreen(): ReactNode {
         </div>
       </div>
 
-      <p className="matchscore">
-        Match Score: <span className="num">{standing.matchPoints.A}</span>
-        <span className="matchscore__dash">–</span>
-        <span className="num">{standing.matchPoints.B}</span>
-        <span className="matchscore__to"> to {cfg.targetMatchPoints}</span>
-      </p>
 
       {showManual ? (
         <div className="overlay" role="dialog" aria-label="Scoreboard">
           <div className="overlay__sheet">
           <ManualEntry
             config={cfg}
-            a={a}
-            b={b}
+            roundIndex={editing ?? game.rounds.length}
+            roundCount={game.rounds.length}
+            onNavigate={(index) => setEditing(index >= game.rounds.length ? null : index)}
+            a={editing === null ? a : (game.rounds[editing]?.A ?? a)}
+            b={editing === null ? b : (game.rounds[editing]?.B ?? b)}
             onApply={(next) => {
+              // Editing a committed round writes straight through; the board
+              // behind the overlay stays on the live round either way.
+              if (editing !== null && gameId) {
+                if ("totals" in next) return;
+                updateRound(gameId, editing, next.a, next.b);
+                setEditing(null);
+                return;
+              }
               if ("totals" in next) {
                 // Score-only: no detail, so the board stays empty.
                 setTotals(next.totals);
@@ -213,7 +229,10 @@ export function EntryScreen(): ReactNode {
                 setDiscs(discsFromCounts(next.a, colorA).concat(discsFromCounts(next.b, colorB)));
               }
             }}
-            onClose={() => setShowManual(false)}
+            onClose={() => {
+              setShowManual(false);
+              setEditing(null);
+            }}
           />
           </div>
         </div>
@@ -246,7 +265,8 @@ export function EntryScreen(): ReactNode {
       </div>
 
       {confirming ? (
-        <Card>
+        <div className="overlay" role="dialog" aria-label="Finish round">
+          <div className="overlay__sheet">
           <p style={{ margin: "0 0 0.25rem", fontWeight: 700 }}>
             Place {stillToPlace} more {stillToPlace === 1 ? "disc" : "discs"} to record detailed
             scoring
@@ -262,21 +282,21 @@ export function EntryScreen(): ReactNode {
               Skip
             </button>
           </div>
-        </Card>
-      ) : (
+          </div>
+        </div>
+      ) : null}
+
+      {(
         <button
           type="button"
           className="btn btn--accent btn--block btn--lg"
           onClick={commit}
         >
           Finish round
-          {pending.result !== "tie"
-            ? ` · ${sideName(pending.result)} +${cfg.matchPointsWin}`
-            : ` · ${cfg.matchPointsTie} each`}
         </button>
       )}
 
-      <div className="row" style={{ marginTop: "0.75rem" }}>
+      <div className="row row--tools" style={{ marginTop: "0.5rem" }}>
         <button type="button" className="btn btn--ghost" onClick={reset}>
           Clear
         </button>
