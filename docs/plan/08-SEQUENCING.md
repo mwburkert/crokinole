@@ -84,7 +84,7 @@ prerequisite.
 | 8 | Zone SSL → Full (strict) (§7.7 7) | **owner** | 5 min | nothing |
 | 9 | `auth.config.ts` + `/admin/token` Worker + Workers deploy (§7.5a) | agent | ~½d | 7, migration |
 | 10 | **Verify `identity.email` actually arrives** (§7.1a) | agent | 30 min | 9 |
-| 11 | Retire the interim passcode (§Retire the passcode) | agent | 1h | 9, 10, coordinate with migration agent |
+| 11 | Retire the interim passcode (`docs/handoff/02-REMAINING-PLAN.md` §Retire the passcode) | agent | 1h | 9, 10, coordinate with migration agent |
 | 12 | Invitations — Route A, Access Group API (§7.9) | agent | ~½d | 6, 7 |
 | 13 | Resend + verified sending domain for invite email | owner + agent | 1h | 6 |
 
