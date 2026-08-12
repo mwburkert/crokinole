@@ -1,0 +1,95 @@
+/*
+ * The self-join sheet.
+ *
+ * The shell is `.overlay` / `.overlay__sheet` from `app.css` — the same pair the
+ * round-entry scoreboard floats on, so there is one modal in this app and not
+ * two that drift apart. Everything here dresses the form inside it.
+ *
+ * Phone-first: labels sit above their fields because at 393px a label beside a
+ * field is the first thing to wrap badly, and every control inherits `.field` /
+ * `.btn`, both of which are already `--tap` (48px) tall.
+ */
+
+.join__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--gap-sm);
+  margin-bottom: var(--gap);
+}
+
+.join__title {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+.join__sub {
+  margin: 0.15rem 0 0;
+}
+
+.join__form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+}
+
+.join__group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-xs);
+}
+
+/* Matches the gate's field label — the two are the same kind of thing. */
+.join__label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+/* "optional" is a note, not part of the name of the field. */
+.join__optional {
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 500;
+}
+
+.join__hint {
+  margin: 0;
+}
+
+/*
+ * Locked, not gone: the code stays readable so it can be checked against the one
+ * they were handed, but it is `readonly` rather than `disabled` — disabled would
+ * take it out of the accessibility tree entirely, and a field you can't reach is
+ * not the same as a field you can't change.
+ */
+.join__field--locked {
+  background: var(--bg-sunken);
+  color: var(--ink-soft);
+  cursor: default;
+}
+
+.join__actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-sm);
+}
+
+.join__done {
+  text-align: center;
+  padding: var(--gap-sm) 0 0;
+}
+
+.join__done-name {
+  margin: 0 0 0.25rem;
+  font-size: 1.15rem;
+  font-weight: 800;
+}
+
+.join__done-note {
+  margin: 0 0 var(--gap);
+}

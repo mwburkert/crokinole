@@ -24,6 +24,39 @@ import { QrCode } from "./QrCode";
  * app, this allowlist decides what they may *do*. See `convex/admin.ts`.
  */
 export function AdminScreen(): ReactNode {
+  return (
+    <div className="stack">
+      {/*
+        Above every branch below it, deliberately. "How does anyone get in
+        here?" used to be answered by three orphaned sentences — one on the
+        gate, one under the roster, one under the QR code — and two of them were
+        only ever shown to an admin. A player-tier caller gets a different
+        screen entirely and is the person most likely to be holding the
+        question. It needs no data either, so it renders while the roster is
+        still in flight.
+      */}
+      <GettingIn />
+      <Roster />
+    </div>
+  );
+}
+
+/**
+ * 🕐 TEMPORARY (§7.1) — the whole of it is true only while one shared code is
+ * the whole of auth. It goes with the gate when Cloudflare Access lands.
+ */
+function GettingIn(): ReactNode {
+  return (
+    <Card title="Getting in">
+      <p className="faint" style={{ margin: 0 }}>
+        Nobody signs in — everyone shares one code. The invite link carries it, so opening the
+        link is the whole of getting in. Share it like a password: anyone holding it is in.
+      </p>
+    </Card>
+  );
+}
+
+function Roster(): ReactNode {
   const { isLoading, membersLoading, members, currentEmail, isAdmin, isSuperAdmin } =
     useStore();
   const [adding, setAdding] = useState(false);
@@ -39,13 +72,19 @@ export function AdminScreen(): ReactNode {
   // false. Waiting on `isLoading` alone left this screen — the app's roster —
   // announcing "Players — 0 / Nobody yet." over five real people, for a whole
   // round trip, every single visit.
+  // Every branch below returns a `.stack`, never a bare `.card`: `app.css` gives
+  // `.card + .card` its own margin, which would land on top of the parent
+  // stack's gap and space this one card further from the intro than the admin
+  // list is.
   if (isLoading || membersLoading) {
     return (
-      <Card>
-        {/* Five rows because five regulars is what's coming — the list settles
-            into place rather than jumping. */}
-        <Loading rows={5} />
-      </Card>
+      <div className="stack">
+        <Card>
+          {/* Five rows because five regulars is what's coming — the list settles
+              into place rather than jumping. */}
+          <Loading rows={5} />
+        </Card>
+      </div>
     );
   }
 
@@ -58,7 +97,17 @@ export function AdminScreen(): ReactNode {
       : members.find((member) => member.email === currentEmail);
 
   if (!isAdmin) {
-    return me ? <SelfSettings member={me} /> : <Card><Empty>Nothing to see here.</Empty></Card>;
+    return (
+      <div className="stack">
+        {me ? (
+          <SelfSettings member={me} />
+        ) : (
+          <Card>
+            <Empty>Nothing to see here.</Empty>
+          </Card>
+        )}
+      </div>
+    );
   }
 
   return (
@@ -109,12 +158,6 @@ export function AdminScreen(): ReactNode {
           })
         )}
       </Card>
-
-      {/* 🕐 True only while one shared code is the whole of auth. Delete with it. */}
-      <p className="faint" style={{ margin: 0 }}>
-        Nobody signs in yet — everyone shares one code. A name is all it takes to be picked
-        for a game.
-      </p>
 
       {adding ? <AddSheet onClose={() => setAdding(false)} /> : null}
 
@@ -423,11 +466,10 @@ function ShareCard(): ReactNode {
         <QrCode value={shareUrl(code)} size={170} label="QR code that opens the app" />
       </div>
       {/* The origin, not the link — printing the link would print the code. */}
-      <p className="faint" style={{ textAlign: "center", margin: "0 0 0.5rem" }}>
+      {/* "Share it like a password" now lives in the intro at the top of this
+          screen, said once for everyone rather than three times for admins. */}
+      <p className="faint" style={{ textAlign: "center", margin: "0 0 0.75rem" }}>
         {appOrigin()}
-      </p>
-      <p className="faint" style={{ marginTop: 0 }}>
-        The link carries the code. Share it like a password — anyone holding it is in.
       </p>
       <div className="stack" style={{ gap: "0.5rem" }}>
         <button

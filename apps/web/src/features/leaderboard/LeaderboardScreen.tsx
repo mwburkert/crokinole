@@ -13,6 +13,7 @@ import { Link } from "react-router-dom";
 
 import { useLiveGame, useStore, useVisibleGames } from "../../data/store";
 import { Card, Empty, Loading, Money } from "../../ui/components";
+import { JoinSheet } from "../join/JoinSheet";
 
 interface Row extends PlayerStats {
   displayName: string;
@@ -36,6 +37,8 @@ export function LeaderboardScreen(): ReactNode {
   const live = useLiveGame();
   const { players, presentIds, togglePresent, isLoading } = useStore();
   const [showAbsent, setShowAbsent] = useState(true);
+  /** The self-join sheet, opened from under the presence list. */
+  const [joining, setJoining] = useState(false);
 
   const tonight = currentNightKey();
   const nights = useMemo(() => {
@@ -164,14 +167,25 @@ export function LeaderboardScreen(): ReactNode {
             <p className="faint" style={{ margin: "0.75rem 0 0.4rem" }}>
               Tap a name to mark who's here. Only those players show up when you start a game.
             </p>
-            <label className="toggle">
-              <input
-                type="checkbox"
-                checked={showAbsent}
-                onChange={(event) => setShowAbsent(event.target.checked)}
-              />
-              Show inactive
-            </label>
+            {/*
+              "Add player" sits with the list rather than with the actions
+              below, because it answers the question you ask *at* the list: the
+              person in front of you isn't on it. Secondary weight throughout —
+              "New game" is the thing this screen is for.
+            */}
+            <div className="spread">
+              <label className="toggle">
+                <input
+                  type="checkbox"
+                  checked={showAbsent}
+                  onChange={(event) => setShowAbsent(event.target.checked)}
+                />
+                Show inactive
+              </label>
+              <button type="button" className="btn btn--ghost" onClick={() => setJoining(true)}>
+                Add player
+              </button>
+            </div>
           </>
         ) : null}
       </Card>
@@ -204,6 +218,8 @@ export function LeaderboardScreen(): ReactNode {
           </Link>
         </div>
       ) : null}
+
+      {joining ? <JoinSheet onClose={() => setJoining(false)} /> : null}
     </div>
   );
 }

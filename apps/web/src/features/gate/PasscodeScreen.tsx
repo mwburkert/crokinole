@@ -74,7 +74,6 @@ export function PasscodeScreen({
             autoFocus
             value={value}
             onChange={(event) => setValue(event.target.value)}
-            aria-describedby="passcode-hint"
           />
           <button
             type="submit"
@@ -91,9 +90,14 @@ export function PasscodeScreen({
           </p>
         ) : null}
 
-        <p className="faint gate__hint" id="passcode-hint">
-          Ask whoever set up the night for the code.
-        </p>
+        {/*
+          No standing hint under this. "Everyone shares one code, the invite
+          link carries it, share it like a password" now reads as one block at
+          the top of Settings instead of three orphaned sentences across three
+          screens. It was the wrong place for it anyway: advice for someone who
+          by definition can't reach the app, sitting under a labelled field and
+          a button that already say what to do.
+        */}
       </div>
     </div>
   );
