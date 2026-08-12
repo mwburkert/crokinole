@@ -13,7 +13,7 @@ import {
   type RingCounts,
   type TeamKey,
 } from "@crokinole/core";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
 import { useStore } from "../../data/store";
@@ -68,6 +68,22 @@ export function EntryScreen(): ReactNode {
   const [editTouched, setEditTouched] = useState(false);
 
   const game = gameId ? getGame(gameId) : undefined;
+
+  /*
+   * Swap the placeholder in the URL for the real id, once there is one.
+   *
+   * `createGame` returns a `pending:` id synchronously so this screen can be
+   * navigated to before Convex has answered, and the seam maps it to the real
+   * id when the insert lands. That map is in memory: reload, and the URL is
+   * left holding a placeholder the seam can only guess at. Rewriting the
+   * address as soon as the game is known retires the guess after one frame,
+   * so the URL is shareable, reloadable, and survives the game finishing.
+   */
+  useEffect(() => {
+    if (game && gameId?.startsWith("pending:")) {
+      navigate(`/games/${game.id}/play`, { replace: true });
+    }
+  }, [game, gameId, navigate]);
 
   // A query in flight and a game that isn't there look identical through the
   // seam — both are "no game". Saying "That game is gone" on the first frame of

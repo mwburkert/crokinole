@@ -397,9 +397,22 @@ export function StoreProvider({ children }: { children: ReactNode }): ReactNode 
   const resolveId = useCallback(
     (gameId: string): string | undefined => {
       if (!gameId.startsWith(PENDING_PREFIX)) return gameId;
-      return (
-        pendingIds.get(gameId) ?? games.find((game) => game.status === "in_progress")?.id
-      );
+      const mapped = pendingIds.get(gameId);
+      if (mapped) return mapped;
+      /*
+       * The mapping is gone — a reload cleared it. The open game is what the
+       * placeholder meant, so prefer that.
+       *
+       * ⚠️ Falling back to *only* the open game loses the game the moment it
+       * finishes. Reload mid-game (routine on a phone), play to five, and the
+       * last round flips the status to `final`, leaving nothing `in_progress`
+       * for this to find — so the screen that should be showing the settlement
+       * shows "That game is gone." instead, on the game you just finished.
+       * `games` is newest-first, so the most recent game is the same one a beat
+       * later. `EntryScreen` also rewrites the URL to the real id as soon as it
+       * has one, which stops the placeholder outliving the session at all.
+       */
+      return games.find((game) => game.status === "in_progress")?.id ?? games[0]?.id;
     },
     [pendingIds, games],
   );
