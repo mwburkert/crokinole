@@ -64,17 +64,27 @@ Every row below was verified against the code on 2026-08-12, not inferred.
 
 | # | What | Where | Breaks how |
 |---|---|---|---|
-| 1 | **Two different "the live game" rules** | `store.tsx:469-472` vs `convex/games.ts:71-89` | The client takes `.find()` over a `playedAt`-descending list; the server `.collect()`s all in-progress games and takes `.sort(...)[0]`. With one live game they agree by accident. With two they can disagree, and the second game is invisible either way |
+| 1 | **"The live game" is singular, and the second one silently disappears** | `store.tsx:469-472` and `convex/games.ts:71-89` | The client takes `.find()` over a `playedAt`-descending, deleted-filtered list; the server `.collect()`s all in-progress games, filters deleted, sorts `playedAt`-descending and takes `[0]`. **Corrected 2026-08-12: these two agree** — an earlier draft of this row claimed they disagree, which was wrong; both resolve to the most recently started live game. The actual defect is that **both silently discard every other live game**, with no count and no warning. Return type is `GameWithRounds \| undefined` / one-or-null — never a list. (The one case they *could* diverge is a `playedAt` tie, since sort stability then depends on input order, which differs between a `.collect()` and the client's list. `playedAt` is millisecond-precision so this is narrow — but it is caller-supplied and optional, so seeded games can collide.) |
 | 2 | **The same player can be seated at two live tables at once** | `store.tsx:353-356`, `validate.ts:153-165`, `games.create` | Presence filters on `isActive` only; `validateGame` checks duplicates *within* one game; `create` does no cross-game check. `aggregateStats` will then count that player in both |
 | 3 | **"Mix up" suggests people who are mid-game** | `NewGameScreen.tsx:124-141` → `night.ts:161-222` | Nothing models "currently seated elsewhere". `nightHistory.played` counts *finished* games, not occupancy, so the suggester produces impossible seatings and the `here >= 4` gate claims doubles is possible when all four are busy |
 | 4 | **No per-game participant check exists** | all nine guards in `convex/games.ts` | Every mutation gates on `assertAllowlisted` alone. Allowlisted means "may edit any game". There is nothing to extend — it has to be built |
 | 5 | **Guests cannot be actors** | `auth.ts:79-94`, `schema.ts:59` | `resolvePlayer` matches only `authSubject` or `email`; `allowlist.email` is required. A row with neither matches nothing. See §9.6 |
 
-### Blocks the feature outright
+### The main structural obstacle
 
 | # | What | Where | Breaks how |
 |---|---|---|---|
-| 6 | **The tab bar's centre button is one slot doing double duty** | `App.tsx:20, 43-68` | It is "Resume" whenever *any* game is live, and "New" otherwise. So the moment table 1 starts, **the primary action surface offers no way to start table 2.** This is the single biggest structural blocker |
+| 6 | **The tab bar's centre button is one slot doing double duty** | `App.tsx:20, 43-68` | It renders "Resume" (▶, linking to the live game) whenever *any* game is live, and "New" (+) otherwise. So once table 1 starts, **the app's primary action button no longer offers "new game" at all** — and it is the deliberate primary action, styled to ride above the bar. Restructuring it is the first thing to design |
+
+> **Corrected 2026-08-12: this is a redesign, not a hard block.** An earlier draft
+> called it "blocks the feature outright". It does not — `LeaderboardScreen.tsx:182-186`
+> renders "New game" **unconditionally**, so a second table is startable from the
+> Standings screen today. The tab bar is the *prominent* path, not the only one.
+> Worth knowing that the code already anticipated concurrent games: the comment at
+> `LeaderboardScreen.tsx:169-174` explicitly blesses them — *"Starting a new game
+> while one is open simply leaves the old one in progress — that IS 'finish
+> later' — and it stays resumable from history."* The intent is on record; only
+> the navigation is singular.
 
 ### UX, but severe under tables
 
