@@ -55,13 +55,20 @@ nameservers automatically, which Access requires.
   Fine here, but worth knowing if a cert ever lapses.
 - **Check availability at purchase**; this plan assumes it's still free to register.
 
-## ✅ Q6 — Earnings are not public
+## ✅ Q6 — Nothing is public (revised 2026-08-12)
 
-Money is visible to **authenticated (allowlisted) users only**. Anonymous visitors see win/loss
-records and scoring stats, no dollar figures.
+**Superseded and simplified.** The original answer kept a public leaderboard showing records and
+scoring stats while hiding money behind auth. **The whole app is now gated** — there is no
+anonymous route at all.
 
-Moved from Phase 2 into **Phase 1**, and enforced in the **query layer, not the UI** — a
-`{isAuthed && ...}` guard still ships the numbers to the browser. *Detail: §3.5.*
+This deletes work rather than adding it: the `publicLeaderboard` / `fullStats` split collapses
+into one authenticated query, the "enforce money in the query layer, not the UI" rule becomes
+moot (no audience to leak to), the SPA path-policy caveat in §7.4 disappears because the whole
+hostname is gated, and the only unbounded-audience surface — anonymous viewers holding reactive
+subscriptions — is gone, which removes the realistic way Convex usage could run away.
+
+Cost: showing the app to someone new means adding them to the `Crokinole Players` Access Group
+first. ~30 seconds. Going private→public later is easy; the reverse isn't. *Detail: §3.5.*
 
 ## ✅ Q7 — Global default agent unchanged
 
@@ -76,17 +83,43 @@ owner is **`mwburkert`**.
 
 ---
 
+## In flight — started 2026-08-12
+
+### meal-planner platform migration (from Q4) — NO LONGER DEFERRED
+
+**Reversed 2026-08-12.** The 2026-08-11 decision was to hold this until crokinole proved the
+pattern. Mike is doing it now instead, so meal-planner is the app that proves the pattern rather
+than the one that follows it. That's a reasonable inversion — it's the only app of the three that
+already exists and runs, and it's the only one where Access is a genuine security boundary rather
+than a token issuer, so it exercises the simplest version of the design first.
+
+**Ordering matters here — follow §7.7, and specifically:** create the Zero Trust team and the
+three Access **Groups** before the applications; point the CNAME **grey-cloud first** and wait for
+Render to issue its certificate before flipping to orange-cloud; **delete all AAAA records**
+(Render has no IPv6); set the zone SSL/TLS mode to **Full (strict)** before the flip, not after.
+
+**Blocking item:** handoff item 2 (origin-agnostic — no hardcoded `*.onrender.com` URLs) was
+"nice to have while you're in there." It is now the one thing that can actually break this
+migration, and it should be verified before the DNS flip.
+
+**Keep the Basic auth.** `*.onrender.com` stays directly reachable no matter what DNS says.
+
+**The database move runs in parallel and is independent of DNS.** `lib/db.ts` falls back to a
+SQLite file under `data/`
+when `DATABASE_URL` is unset, and Render's filesystem is ephemeral — so if that variable isn't
+set in the dashboard, the app has been losing all persisted state whenever it sleeps. Rewriting
+that one file against `ConvexHttpClient` fixes the data loss *and* consolidates all three apps
+onto one database platform. Turso is dropped: its free tier is fine, but it's a third platform,
+and Turso has pivoted to a closed-source Rust rewrite with the continuity promise scoped
+explicitly to paid customers. The seam is 74 lines and three functions, so this is reversible.
+
+**Hosting stays on Render** (Hobby workspace, Free instance, $0) for now. Vercel Hobby is the
+upgrade path — no cold start, real CPU, ~1 hour to move — and stays cheap to reach as long as the
+portability rules in §7.8 hold. Its repo also stays private for now — no decision forced.
+
+---
+
 ## Deferred — revisit later, nothing blocked
-
-### meal-planner platform migration (from Q4)
-
-**Do not migrate it yet.** Exposure is low today (only you and your wife know the URL), and
-moving a live app mid-feature-work is needless risk. Crokinole goes onto the platform first and
-proves the pattern; meal-planner follows once close friends actually need access.
-
-Its handoff has been updated to say so explicitly, so its agent keeps shipping features on
-Render with Basic auth and doesn't start a migration. Its repo also stays private for now — no
-decision forced.
 
 ### The stale oh-heck checkout (from Q8)
 

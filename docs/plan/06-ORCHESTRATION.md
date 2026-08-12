@@ -38,7 +38,7 @@ Wave 1  ── 3 agents in parallel ──────────────�
 Wave 2  ── 3 agents in parallel ──────────────────────────
   D: T4 entry screen                 (owns apps/web/src/features/entry)
   E: T5 history + detail + edit      (owns .../features/history)
-  F: T6 stats + public leaderboard   (owns .../features/stats)
+  F: T6 stats + leaderboard          (owns .../features/stats)
          ↓
 Wave 3  ── 3 QA agents in parallel, read-only ────────────
   G: rules adversarial / property tests
@@ -66,7 +66,7 @@ what stops an agent quietly "fixing" a test to make its own bug disappear.
 | Agent | Job | Prompt shape |
 |---|---|---|
 | **G — rules fuzz** | Property-test `packages/core` against the spec prose in `03-PHASE-1.md` §3.4. Generate random legal boards; assert invariants (match points never exceed target+1; differential sign matches winner; totals ≤ `discsPerTeam × 20`). | "Find inputs where the engine disagrees with the spec. Report; do not fix." |
-| **H — auth/security** | Try to write without being on the allowlist. Confirm every mutation calls `assertAllowlisted`. **Confirm the public leaderboard query never selects bet, earnings, settlement, or email fields** — checking the wire payload, not the rendered UI. | "You are an attacker with a valid Convex client and no allowlist entry. What can you write or read? Dump the raw response of every public query." |
+| **H — auth/security** | Try to read or write without being on the allowlist. Confirm **every** query and mutation calls `assertAllowlisted` — there is no public route as of 2026-08-12, so *any* function that returns data to an unauthenticated caller is a bug. Also confirm a token carrying **another app's AUD** is rejected (§7.1). | "You are an attacker with a valid Convex client and no allowlist entry. Enumerate every function and dump the raw wire response of each. Anything that returns data is a finding." |
 | **I — reconciliation** | Hand-compute one full night of 5 games from a fixture, then compare against the app's stats output field by field. | "Compute independently first, then compare. Report every mismatch." |
 
 **Agent H matters more than it looks.** Because Cloudflare Access does not protect Convex

@@ -62,18 +62,21 @@ date filter on the same fold, not as separate code paths.
 
 ---
 
-## 4.3 Public leaderboard + filters
+## 4.3 Leaderboard + filters
 
-Phase 1 ships a plain public leaderboard. Phase 2 makes it useful:
+Phase 1 ships a plain leaderboard, **behind auth like the rest of the app** (revised
+2026-08-12 — there is no public route). Phase 2 makes it useful:
 
 - Filter by date range, by player, by partner pairing, by bet amount.
 - Sort by any stat column.
 - Shareable URL that encodes the filter state, so you can drop "the standings since January"
-  into the group chat.
-- **Privacy control:** decide whether earnings are public or auth-only. Recommendation:
-  **money is hidden from the public view by default**, with a per-player opt-in. Publishing
-  what your friends owe each other on the open internet is a different decision than
-  publishing win rates, and it should be a deliberate one.
+  into the group chat — note the recipient still needs to be in the `Crokinole Players` Access
+  Group to open it.
+- **If you ever want a public view**, that's a deliberate Phase 2 decision, and it reopens three
+  things Phase 1 closed: the two-query split (money must then be excluded in the query layer, not
+  the UI), the SPA path-policy caveat in §7.4, and an unbounded-audience surface on Convex egress
+  — anonymous viewers holding reactive subscriptions are the one realistic way usage runs away.
+  Serve any public route as a **cached, non-reactive query** if you do it.
 
 ---
 
