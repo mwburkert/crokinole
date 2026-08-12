@@ -22,13 +22,6 @@ import { Card, Empty, Loading, Money } from "../../ui/components";
 import { BoardScorer } from "./BoardScorer";
 import { MatchScoreCard } from "./MatchScoreCard";
 import { ManualEntry } from "./ManualEntry";
-import {
-  TwentiesRows,
-  recordTwenties,
-  toPlayerStats,
-  twentiesFrom,
-  type EnteredTwenties,
-} from "./TwentiesRows";
 
 /**
  * Round entry — §3.5 steps 2 to 5. **This is the screen that has to be fast.**
@@ -68,12 +61,6 @@ export function EntryScreen(): ReactNode {
   const [seededCorrection, setSeededCorrection] = useState(!correcting);
   /** Shown for a beat after each round so you see the match take shape. */
   const [showCard, setShowCard] = useState(false);
-  /** Per-player twenties for the committed round being corrected. */
-  const [editTwenties, setEditTwenties] = useState<EnteredTwenties>({});
-  /** Which round `editTwenties` was seeded from — see the re-seed below. */
-  const [twentiesRound, setTwentiesRound] = useState<number | null>(null);
-  /** Whether that seed has been changed, which is what re-enables Save. */
-  const [editTouched, setEditTouched] = useState(false);
 
   const game = gameId ? getGame(gameId) : undefined;
 
@@ -106,16 +93,6 @@ export function EntryScreen(): ReactNode {
    */
   if (!game && gameId && isPendingGameId(gameId)) return <Loading rows={3} />;
   if (!game) return <Empty>That game is gone.</Empty>;
-
-  // Paging to another round has to bring that round's per-player twenties with
-  // it, or Save would write round 3's breakdown onto round 1. Re-seeding during
-  // render is the supported way to reset state on a prop change — React re-runs
-  // the component before painting, so nothing flashes.
-  if (twentiesRound !== editing) {
-    setTwentiesRound(editing);
-    setEditTwenties(editing === null ? {} : twentiesFrom(game.rounds[editing]?.playerStats));
-    setEditTouched(false);
-  }
 
   const cfg = game.config;
   const standing = gameStanding(game.rounds, cfg);
@@ -183,18 +160,44 @@ export function EntryScreen(): ReactNode {
   const complete = manualCounts !== null || totals !== null || placementComplete(discs, budget);
   const stillToPlace = left.black + left.white;
 
+  /**
+   * A board edit. **Touching the board makes it the source of truth again.**
+   *
+   * ⚠️ This used to leave `manualCounts` and `totals` standing while the comment
+   * above claimed otherwise. Typing counts into the manual menu seeds the board
+   * to match, so the two agreed at that instant — but the next chip you moved
+   * changed only `discs`, and the score on screen went on coming from the
+   * numbers you had typed. Board and scoreboard disagreed, and the *typed*
+   * counts were what got written. That is the exact "two sources for one
+   * number" failure this design keeps guarding against, and it is the one the
+   * count-from-chip-positions rule settles: the count is where the chips are,
+   * always.
+   *
+   * Only real board interaction reaches here — the manual menu seeds `discs`
+   * directly — so clearing cannot wipe what someone has just typed.
+   */
   const apply = (next: PlacedDisc[]): void => {
     setPast((stack) => [...stack, discs]);
     setFuture([]);
     setDiscs(next);
+    setManualCounts(null);
+    setTotals(null);
   };
 
+  /**
+   * Undo and redo move the board, so they hand authority back to it too — for
+   * the same reason `apply` does. Stepping back to an earlier board while a
+   * typed total still governed the score would leave the two disagreeing again,
+   * just by a different route.
+   */
   const undo = (): void => {
     setPast((stack) => {
       const previous = stack.at(-1);
       if (!previous) return stack;
       setFuture((ahead) => [discs, ...ahead]);
       setDiscs(previous);
+      setManualCounts(null);
+      setTotals(null);
       return stack.slice(0, -1);
     });
   };
@@ -205,6 +208,8 @@ export function EntryScreen(): ReactNode {
       if (!next) return stack;
       setPast((behind) => [...behind, discs]);
       setDiscs(next);
+      setManualCounts(null);
+      setTotals(null);
       return stack.slice(1);
     });
   };
@@ -216,14 +221,6 @@ export function EntryScreen(): ReactNode {
     setManualCounts(null);
     setTotals(null);
     setConfirming(false);
-  };
-
-  /** Record one player's twenties on the committed round being corrected. */
-  const bumpEdit = (team: TeamKey, playerId: string, next: number): void => {
-    setEditTwenties((current) =>
-      recordTwenties(current, game.teams[team].playerIds, playerId, next),
-    );
-    setEditTouched(true);
   };
 
   const write = (): void => {
@@ -286,10 +283,6 @@ export function EntryScreen(): ReactNode {
           }}
           a={editing === null ? a : (game.rounds[editing]?.A ?? a)}
           b={editing === null ? b : (game.rounds[editing]?.B ?? b)}
-          // The twenties below belong to this sheet, not to the counts, so Save
-          // has to know they changed or the only button that records them stays
-          // disabled.
-          extraDirty={editing !== null && editTouched}
           onApply={(next) => {
             // Editing a committed round writes straight through; the board
             // behind the overlay stays on the live round either way.
@@ -304,13 +297,12 @@ export function EntryScreen(): ReactNode {
                  * Everything else goes: zero counts (the sections are no longer
                  * claimed, and `pointsOverride` is what supplies the total), no
                  * board (positions that no longer describe the round), and no
-                 * per-player twenties (they reconcile against a twenties count
-                 * that is now zero). The mutation clears what it isn't given.
+                 * board (positions that no longer describe the round). The
+                 * mutation clears what it isn't given.
                  */
                 updateRound(gameId, editing, EMPTY_RING_COUNTS, EMPTY_RING_COUNTS, {
                   pointsOverride: { A: next.totals.a, B: next.totals.b },
                 });
-                setEditTouched(false);
                 return;
               }
               const round = game.rounds[editing];
@@ -324,18 +316,9 @@ export function EntryScreen(): ReactNode {
                 sameCounts(round.A, next.a) &&
                 sameCounts(round.B, next.b);
               const board = keepsBoard ? round?.discs : undefined;
-              // Always sent, because the mutation clears what it isn't given —
-              // a correction that dropped these would wipe a breakdown nobody
-              // asked it to touch.
-              const playerStats = toPlayerStats(editTwenties, game.teams, {
-                A: next.a,
-                B: next.b,
-              });
               updateRound(gameId, editing, next.a, next.b, {
                 ...(board ? { discs: board } : {}),
-                ...(playerStats ? { playerStats } : {}),
               });
-              setEditTouched(false);
               // Deliberately stays on the round just corrected instead of
               // jumping back to the live one: you watch the numbers land, and
               // fixing several in one sitting is what the pager is for.
@@ -382,16 +365,6 @@ export function EntryScreen(): ReactNode {
                   </p>
                 </div>
               ) : null}
-
-              <TwentiesRows
-                teams={game.teams}
-                config={cfg}
-                counts={{ A: edited.A, B: edited.B }}
-                roundIndex={edited.index}
-                entered={editTwenties}
-                onChange={bumpEdit}
-                nameOf={nameOf}
-              />
             </>
           ) : null}
         </ManualEntry>
