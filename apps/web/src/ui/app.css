@@ -1346,3 +1346,18 @@ html { scrollbar-width: none; }
 
 /* The gutter has to be unmistakable — it's the one drop that scores nothing. */
 .scorer__ring.is-hover { filter: brightness(1.15) saturate(1.2); }
+
+/* The centre hole opens up while a disc is held over it, then pulses. */
+.scorer__hole {
+  transition: none; /* driven per-frame, not by CSS */
+}
+
+.scorer__hole.is-open {
+  animation: hole-pulse 620ms ease-in-out infinite;
+  transform-origin: center;
+}
+
+@keyframes hole-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.62; }
+}

@@ -10,7 +10,7 @@ import {
   type PlacedDisc,
   type Region,
 } from "@crokinole/core";
-import { useCallback, useRef, useState, type PointerEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type PointerEvent, type ReactNode } from "react";
 
 /**
  * The board scorer (§3.5).
@@ -27,6 +27,10 @@ import { useCallback, useRef, useState, type PointerEvent, type ReactNode } from
 
 /** How long a press must last before it becomes a drag. */
 const HOLD_MS = 170;
+/** How long a disc must hover the centre before the hole is fully open. */
+const HOLE_OPEN_MS = 650;
+/** How far the hole opens, as a multiple of its resting radius. */
+const HOLE_MAX_SCALE = 2.6;
 /** Movement before the hold completes is treated as a scroll, not a drag. */
 const SLOP = 10;
 
@@ -100,12 +104,39 @@ export function BoardScorer({
     kind: "points" | "gutter" | "twenty";
   } | null>(null);
 
+  /**
+   * How far the centre hole has opened up, 0–1.
+   *
+   * Holding a disc over the twenty grows the hole toward it and then pulses.
+   * Sinking one is the highest-value thing you can do and the smallest target
+   * on the board, so it's deliberately a *held* gesture — a disc brushing past
+   * the centre never becomes a twenty by accident.
+   */
+  const [holeGrow, setHoleGrow] = useState(0);
+
   const svgRef = useRef<SVGSVGElement | null>(null);
   const holdTimer = useRef<number | null>(null);
   const pending = useRef<{ source: Source; x: number; y: number; color: DiscColor } | null>(null);
   const flashId = useRef(0);
 
   const left = remaining(discs, perTeam);
+  const overHole = drag !== null && hover === "twenty";
+
+  useEffect(() => {
+    if (!overHole) {
+      setHoleGrow(0);
+      return;
+    }
+    const started = performance.now();
+    let raf = 0;
+    const step = (): void => {
+      const progress = Math.min(1, (performance.now() - started) / HOLE_OPEN_MS);
+      setHoleGrow(progress);
+      if (progress < 1) raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [overHole]);
 
   /** Pointer position in board space. */
   const pointAt = useCallback((event: PointerEvent): { x: number; y: number } | null => {
@@ -279,7 +310,7 @@ export function BoardScorer({
         onPointerUp={handleUp}
         onPointerCancel={handleUp}
       >
-        <BoardArt hover={hover} />
+        <BoardArt hover={hover} holeGrow={holeGrow} />
 
         {/* Twenties, laid out in a row directly under each score card so the
             two sides read at a glance without anyone counting a number. */}
@@ -353,7 +384,13 @@ export function BoardScorer({
   );
 }
 
-function BoardArt({ hover }: { hover: Region | null }): ReactNode {
+function BoardArt({
+  hover,
+  holeGrow,
+}: {
+  hover: Region | null;
+  holeGrow: number;
+}): ReactNode {
   const ring = (region: Region, r: number, fill: string): ReactNode => (
     <circle
       cx={BOARD_CENTRE}
@@ -384,7 +421,15 @@ function BoardArt({ hover }: { hover: Region | null }): ReactNode {
           />
         );
       })}
-      {ring("twenty", RADII.twenty, "var(--twenty)")}
+      <circle
+        cx={BOARD_CENTRE}
+        cy={BOARD_CENTRE + BOARD_TOP}
+        r={RADII.twenty * (1 + holeGrow * (HOLE_MAX_SCALE - 1))}
+        fill="var(--twenty)"
+        stroke="var(--walnut-soft)"
+        strokeWidth="1.2"
+        className={`scorer__hole${holeGrow >= 1 ? " is-open" : ""}`}
+      />
     </g>
   );
 }
