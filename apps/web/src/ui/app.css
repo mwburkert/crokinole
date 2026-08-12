@@ -827,9 +827,8 @@
   min-width: 0;
 }
 
-.matchup__side--right {
-  grid-template-columns: auto minmax(0, 1fr);
-}
+/* Both sides read the same way — name, then money to its right. Mirroring the
+   right-hand pair put the money first and made the two halves scan differently. */
 
 .matchup__player {
   display: contents;
@@ -845,22 +844,12 @@
   white-space: nowrap;
 }
 
-.matchup__side--right .matchup__name {
-  order: 2;
-  text-align: right;
-}
-
 .matchup__money {
   font-family: var(--font-num);
   font-size: 0.75rem;
   font-weight: 700;
   white-space: nowrap;
   text-align: right;
-}
-
-.matchup__side--right .matchup__money {
-  order: 1;
-  text-align: left;
 }
 
 .matchup__score {
@@ -882,10 +871,12 @@
 .score--loss { color: var(--negative); }
 .score--tie { color: var(--ink); }
 
+/* Was --bg-sunken, which reads as a near-black hole in dark mode. A hairline
+   and a faint tint separate it enough without punching through the card. */
 .matchup__detail {
   padding: var(--gap-sm) var(--gap) var(--gap);
   border-top: 1px dashed var(--line);
-  background: var(--bg-sunken);
+  background: color-mix(in srgb, var(--ink) 4%, transparent);
   font-size: 0.9rem;
 }
 
