@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { NavLink, Route, Routes } from "react-router-dom";
+import { NavLink, Route, Routes, useParams } from "react-router-dom";
 
 import { StoreProvider, useLiveGame, useStore } from "./data/store";
 import { AdminScreen } from "./features/admin/AdminScreen";
@@ -124,6 +124,26 @@ function BoardGlyph({ mark }: { mark?: "resume" | "new" }): ReactNode {
   );
 }
 
+/**
+ * The entry screen, remounted whenever the game changes.
+ *
+ * React Router keeps the same element mounted when only a path *param* changes,
+ * so going from one game's play screen straight to another's carried the whole
+ * of `EntryScreen`'s state across: the discs placed on the previous board, the
+ * undo stack, which round the correction sheet was paged to, and whether the
+ * end-of-game scorecard was showing. Every one of those belongs to a specific
+ * game and none of them mean anything on the next one.
+ *
+ * Keying on the id makes "which game" part of the component's identity, so the
+ * state cannot outlive the game it describes. Cheaper and far more reliable
+ * than resetting a dozen `useState`s in an effect and remembering to add the
+ * thirteenth.
+ */
+function KeyedEntryScreen(): ReactNode {
+  const { gameId } = useParams();
+  return <EntryScreen key={gameId} />;
+}
+
 export function App(): ReactNode {
   return (
     <StoreProvider>
@@ -134,7 +154,7 @@ export function App(): ReactNode {
             <Route path="/games" element={<HistoryScreen />} />
             <Route path="/games/new" element={<NewGameScreen />} />
             <Route path="/games/:gameId" element={<GameDetailScreen />} />
-            <Route path="/games/:gameId/play" element={<EntryScreen />} />
+            <Route path="/games/:gameId/play" element={<KeyedEntryScreen />} />
             <Route path="/stats" element={<StatsScreen />} />
             <Route path="/admin" element={<AdminScreen />} />
             <Route path="*" element={<p className="empty">Nothing here.</p>} />

@@ -171,6 +171,38 @@ function fire(promise: Promise<unknown>): void {
 const PENDING_PREFIX = "pending:";
 let pendingCount = 0;
 
+/** True while a screen is still holding a placeholder rather than a real id. */
+export function isPendingGameId(gameId: string): boolean {
+  return gameId.startsWith(PENDING_PREFIX);
+}
+
+/**
+ * The placeholder map, kept in `sessionStorage` as well as in React state.
+ *
+ * Per tab and cleared when it closes, which is exactly the lifetime of a
+ * placeholder. This is what lets a reload resolve the real game instead of
+ * guessing at one — see `resolveId`.
+ */
+function pendingKey(placeholder: string): string {
+  return `crokinole:${placeholder}`;
+}
+
+function readPendingId(placeholder: string): string | undefined {
+  try {
+    return window.sessionStorage.getItem(pendingKey(placeholder)) ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function writePendingId(placeholder: string, gameId: string): void {
+  try {
+    window.sessionStorage.setItem(pendingKey(placeholder), gameId);
+  } catch {
+    // Private browsing. The in-memory map still covers everything but a reload.
+  }
+}
+
 export function StoreProvider({ children }: { children: ReactNode }): ReactNode {
   // 🕐 Guaranteed non-null: `StoreProvider` only ever renders inside the gate.
   const passcode = useRequiredPasscode();
@@ -400,33 +432,31 @@ export function StoreProvider({ children }: { children: ReactNode }): ReactNode 
   /**
    * Turn whatever id a screen is holding into one Convex will accept.
    *
-   * Usually that's a pass-through. It matters only for the window after
-   * `createGame` — and after a reload on a URL that still carries a
-   * placeholder, where the mapping is gone: the open game is the one that
-   * placeholder was always pointing at, so falling back to it is what the URL
-   * meant.
+   * A pass-through for a real id. For a placeholder it is the mapping and
+   * nothing else — **it must never guess at an existing game.**
+   *
+   * ⚠️ It did guess, briefly, and the bug is worth recording. The fallback was
+   * "the open game, or failing that the most recent one", to survive a reload
+   * that wiped the in-memory map. But between `createGame` returning a
+   * placeholder and the new game arriving on the subscription there *is* no
+   * open game — so the most recent one is the last game you finished, and the
+   * screen that should have been an empty board was that game's final
+   * scorecard. `EntryScreen` then rewrote the URL to it, so it never recovered:
+   * starting a new game dropped you into an old one, permanently. The window is
+   * one network round trip, which is why it never showed up on localhost and
+   * always showed up on a phone.
+   *
+   * The map is persisted instead, so a reload recovers the real answer rather
+   * than needing a guess. When there is genuinely no mapping the honest answer
+   * is `undefined`, and the entry screen shows a loading state — a placeholder
+   * means "a game is being created", which *is* a loading state.
    */
   const resolveId = useCallback(
     (gameId: string): string | undefined => {
       if (!gameId.startsWith(PENDING_PREFIX)) return gameId;
-      const mapped = pendingIds.get(gameId);
-      if (mapped) return mapped;
-      /*
-       * The mapping is gone — a reload cleared it. The open game is what the
-       * placeholder meant, so prefer that.
-       *
-       * ⚠️ Falling back to *only* the open game loses the game the moment it
-       * finishes. Reload mid-game (routine on a phone), play to five, and the
-       * last round flips the status to `final`, leaving nothing `in_progress`
-       * for this to find — so the screen that should be showing the settlement
-       * shows "That game is gone." instead, on the game you just finished.
-       * `games` is newest-first, so the most recent game is the same one a beat
-       * later. `EntryScreen` also rewrites the URL to the real id as soon as it
-       * has one, which stops the placeholder outliving the session at all.
-       */
-      return games.find((game) => game.status === "in_progress")?.id ?? games[0]?.id;
+      return pendingIds.get(gameId) ?? readPendingId(gameId);
     },
-    [pendingIds, games],
+    [pendingIds],
   );
 
   /** Every mutation is keyed by a game id; Convex wants its branded form. */
@@ -461,6 +491,9 @@ export function StoreProvider({ children }: { children: ReactNode }): ReactNode 
             amountCents: input.betCentsByPlayer[playerId] ?? 0,
           })),
         }).then((gameId) => {
+          // Persisted as well as held in state: a reload mid-creation would
+          // otherwise leave the URL holding a placeholder nothing can resolve.
+          writePendingId(placeholder, gameId);
           setPendingIds((current) => new Map(current).set(placeholder, gameId));
         }),
       );

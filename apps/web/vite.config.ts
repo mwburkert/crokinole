@@ -1,8 +1,43 @@
+import { rm } from "node:fs/promises";
+import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import react from "@vitejs/plugin-react";
-import { defineConfig } from "vite";
+import { defineConfig, type Plugin } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
+
+/**
+ * Drops dev-only files that live in `public/` from the production build.
+ *
+ * `public/preview.html` is a phone-frame harness for the dev server — nothing
+ * imports it and it is not part of the app — so it must not ship to a public
+ * production host. Vite copies `public/` into `dist/` wholesale, so it has to
+ * be removed explicitly. The dev server is unaffected: it serves straight from
+ * `public/`, and this plugin is `apply: "build"`.
+ *
+ * ⚠️ The hook matters. Vite copies `public/` in `prepareOutDir`, i.e. *before*
+ * the bundle is written, and vite-plugin-pwa globs the finished `dist/` in
+ * `closeBundle` to build the service worker's precache manifest. `writeBundle`
+ * is the only window that is both after that copy and strictly before that
+ * glob. Removing the file any later — including via an `.assetsignore` at
+ * upload time — leaves `sw.js` precaching `/preview.html`, which then 404s in
+ * production and makes the entire service worker fail to install, taking
+ * offline mode and update checks down with it (§7.4 / §3.7). Verified: before
+ * this plugin, `dist/sw.js` did contain a `preview.html` precache entry.
+ */
+function excludeDevOnlyPublicAssets(files: readonly string[]): Plugin {
+  return {
+    name: "crokinole:exclude-dev-only-public-assets",
+    apply: "build",
+    async writeBundle(options) {
+      const outDir = options.dir;
+      if (!outDir) return;
+      await Promise.all(
+        files.map((file) => rm(path.resolve(outDir, file), { force: true })),
+      );
+    },
+  };
+}
 
 export default defineConfig({
   // The Convex CLI maintains `.env.local` at the repo root, but Vite's project
@@ -11,6 +46,7 @@ export default defineConfig({
   envDir: fileURLToPath(new URL("../../", import.meta.url)),
   plugins: [
     react(),
+    excludeDevOnlyPublicAssets(["preview.html"]),
     VitePWA({
       registerType: "autoUpdate",
       includeAssets: ["favicon.svg"],

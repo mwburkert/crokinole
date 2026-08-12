@@ -1,0 +1,89 @@
+{
+  // Cloudflare Workers static-assets deployment for the crokinole SPA.
+  //
+  // Format: `wrangler.jsonc`, not `wrangler.toml` — Cloudflare's current docs say
+  // "Cloudflare recommends using wrangler.jsonc for new projects, and some newer
+  // Wrangler features will only be available to projects using a JSON config file."
+  // Verified against wrangler 4.122.0.
+  //
+  // Deploy from the repo root with `npm run deploy:cf` (see root package.json).
+  // Relative paths below are resolved against THIS file's directory (apps/web),
+  // not the directory wrangler is invoked from.
+  "$schema": "node_modules/wrangler/config-schema.json",
+
+  "name": "crokinole",
+  "compatibility_date": "2026-08-12",
+
+  // No "main" key: this is an assets-only Worker. Cloudflare's docs state
+  // plainly that "The `main` key is optional for assets-only Workers", and
+  // static-asset requests are "free and unlimited" precisely because no Worker
+  // script is invoked to serve them. Adding a script would start metering
+  // traffic that is currently $0 — see docs/plan/07-PLATFORM.md §7.5.
+  "assets": {
+    "directory": "./dist/",
+
+    // THE SPA REQUIREMENT. This app is react-router-dom BrowserRouter, so
+    // /games, /stats, /games/new and /games/<id>/play are client-side routes
+    // with no corresponding file in dist. "single-page-application" serves
+    // index.html for any navigation request that doesn't match a real asset,
+    // which is exactly the documented mode for this. Do NOT hand-roll a
+    // not_found Worker instead — that would make every 404 a billed Worker
+    // invocation and give up the free-and-unlimited static path.
+    //
+    // Note this only applies to *navigation* requests: a missing .js or .png
+    // still returns a real 404 rather than HTML, so a bad asset URL fails
+    // loudly instead of silently resolving to the app shell.
+    "not_found_handling": "single-page-application"
+
+    // "html_handling" is deliberately left at its default (auto-trailing-slash),
+    // matching Cloudflare's documented SPA example.
+  },
+
+  // Attach games.burkert.app directly at deploy time.
+  //
+  // Why this is in the config rather than "attach it in the dashboard
+  // afterwards": for a Workers *Custom Domain* (custom_domain: true, as opposed
+  // to a plain route pattern) Cloudflare does the DNS work itself — "After you
+  // have added the domain or subdomain, Cloudflare will create a new DNS record
+  // for you", and "Creating a Custom Domain will also generate an Advanced
+  // Certificate on your target zone for your target hostname." So one
+  // `wrangler deploy` produces a working, proxied, HTTPS hostname with no
+  // dashboard step and no hand-created CNAME. That is the single-command
+  // outcome this config is for.
+  //
+  // The precondition is that burkert.app is already an active zone in the same
+  // Cloudflare account — which it is, since it was registered at Cloudflare
+  // Registrar (07-PLATFORM.md §7.7), and Registrar mandates Cloudflare
+  // nameservers. Custom Domains require "an active Cloudflare zone" and cannot
+  // be created "on a zone you do not own".
+  //
+  // TWO ways this can fail on the very first deploy, both easy to recover from:
+  //   1. A DNS record already exists at games.burkert.app. Cloudflare "cannot
+  //      create a Custom Domain on a hostname with an existing CNAME DNS
+  //      record" — delete that record in the dashboard, then redeploy.
+  //   2. The zone is not active yet (nameservers still propagating after
+  //      registration).
+  // In either case wrangler fails the deploy with a zone/route error. The
+  // fallback is to comment out this entire "routes" block, run the deploy again
+  // to get the Worker live, and then add the domain under
+  // Workers & Pages > crokinole > Settings > Domains & Routes > Add > Custom
+  // Domain. Nothing else in this file needs to change.
+  "routes": [
+    {
+      "pattern": "games.burkert.app",
+      "custom_domain": true
+    }
+  ],
+
+  // No *.workers.dev URL. The whole point of putting this behind
+  // games.burkert.app is that Cloudflare Access gates it (07-PLATFORM.md §7.1);
+  // crokinole has no public route (§3.5). A crokinole.<subdomain>.workers.dev
+  // hostname would be an ungated second front door to the same app that Access
+  // does not cover, so it is switched off rather than left at its default true.
+  //
+  // If you need to smoke-test the deploy BEFORE the Access application exists,
+  // flip this to true temporarily, deploy, check the printed workers.dev URL,
+  // then set it back to false and deploy again.
+  "workers_dev": false,
+  "preview_urls": false
+}

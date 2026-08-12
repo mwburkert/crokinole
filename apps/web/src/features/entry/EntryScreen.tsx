@@ -16,7 +16,7 @@ import {
 import { useEffect, useState, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
-import { useStore } from "../../data/store";
+import { isPendingGameId, useStore } from "../../data/store";
 import { Card, Empty, Loading, Money } from "../../ui/components";
 import { BoardScorer } from "./BoardScorer";
 import { MatchScoreCard } from "./MatchScoreCard";
@@ -80,7 +80,7 @@ export function EntryScreen(): ReactNode {
    * so the URL is shareable, reloadable, and survives the game finishing.
    */
   useEffect(() => {
-    if (game && gameId?.startsWith("pending:")) {
+    if (game && gameId && isPendingGameId(gameId)) {
       navigate(`/games/${game.id}/play`, { replace: true });
     }
   }, [game, gameId, navigate]);
@@ -90,6 +90,13 @@ export function EntryScreen(): ReactNode {
   // every cold load reads as data loss on a phone refresh mid-game, so nothing
   // is declared missing until the store has actually answered.
   if (isLoading) return <Loading rows={3} />;
+  /*
+   * A placeholder that hasn't resolved yet means the `games.create` mutation is
+   * still in flight — a game being born, not a game missing. Saying it is gone
+   * would be wrong, and showing *some other* game would be worse: that was the
+   * bug where starting a new game dropped you into the last one's scorecard.
+   */
+  if (!game && gameId && isPendingGameId(gameId)) return <Loading rows={3} />;
   if (!game) return <Empty>That game is gone.</Empty>;
 
   // Paging to another round has to bring that round's per-player twenties with
