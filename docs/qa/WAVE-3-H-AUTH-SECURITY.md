@@ -38,11 +38,19 @@ changed. Report what you achieve and what you fail to achieve.
 
 ## Baseline: what "guarded" looks like today
 
-As of 2026-08-12 on `plan/remaining`, `convex/` contains **23 exported
-functions across four files**, and all 23 call `assertAllowlisted` or
-`assertAdmin` as the literal first statement. There are no `action`,
-`internalMutation`, `internalQuery`, or `httpAction` exports, no `convex/http.ts`
-and no `convex/crons.ts`.
+As of 2026-08-12 on `plan/remaining`, `convex/` contains **23 exported Convex
+functions across four files** — `admin.ts` (5), `games.ts` (10), `players.ts`
+(6), `stats.ts` (2) — and all 23 call `assertAllowlisted` or `assertAdmin` as
+the literal first statement. There are no `action`, `internalMutation`,
+`internalQuery`, or `httpAction` exports, no `convex/http.ts` and no
+`convex/crons.ts`.
+
+> A naive `grep "^export const" convex/*.ts` returns **24**. The extra one is
+> `admin.ts:isSuperAdmin`, a plain helper function, not a Convex function. Do
+> not let that discrepancy convince you the count is wrong — but *do* check
+> every non-function export like it, because a helper that reads `ctx.db` and is
+> called from an unguarded path is exactly the kind of thing this brief exists
+> to find.
 
 **Do not trust that paragraph.** It describes the branch as it was before the
 migration landed, and the migration adds functions. **Re-enumerate from the

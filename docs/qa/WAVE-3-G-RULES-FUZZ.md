@@ -25,13 +25,18 @@ caller rather than in core, say so and stop — do not go fix the caller.
 This is the one place where "read-only" needs a precise definition, because you
 cannot property-test anything without writing a test.
 
-- ✅ You **may** create files under `docs/qa/findings/G/` and a scratch harness
-  outside the repo.
+- ✅ You **may create one new test file**, `packages/core/src/wave3-properties.test.ts`.
+  This is deliberate: `vitest.config.ts` only discovers
+  `packages/*/src/**/*.test.ts`, so a harness anywhere else — including under
+  `docs/` — **will never run**. Creating that one new file is the only way to do
+  this job.
+- ✅ You **may** write findings to `docs/qa/findings/G/`.
 - ✅ You **may** add `fast-check` as a devDependency **in your worktree only**,
   to run the harness.
-- ❌ You **may not** modify any file under `packages/core/src/` — including the
-  existing `*.test.ts` files. If an existing test asserts something false, that
-  is a finding, not a thing you fix.
+- ❌ You **may not modify any existing file** under `packages/core/src/` —
+  including the existing `*.test.ts` files. **If an existing test asserts
+  something false, that is a finding, not a thing you fix.** Creating one new
+  test file is permitted; changing a single line of an existing one is not.
 - ❌ You **may not** modify `apps/web` or `convex/`.
 - ❌ Your PR, if you open one, contains **findings and new tests only** — never a
   change to a rule.
@@ -173,5 +178,10 @@ only credible with the coverage attached. An honest "I could not generate legal
 singles boards with unequal stakes" is worth more than a confident all-clear.
 
 Do not open a PR that changes a rule. If the harness itself is worth keeping,
-propose it as a separate PR containing only new test files and the `fast-check`
-devDependency.
+propose it as a separate PR containing only
+`packages/core/src/wave3-properties.test.ts` and the `fast-check` devDependency.
+
+⚠️ Note that `packages/core` has coverage thresholds enforced in `npm test`.
+Adding a test file that exercises new branches can move coverage numbers; if CI
+goes red on thresholds rather than on a failing assertion, that is a CI
+configuration matter — **report it, do not adjust the thresholds.**

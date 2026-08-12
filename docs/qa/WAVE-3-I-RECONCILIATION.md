@@ -27,7 +27,11 @@ Concretely:
    scoring), §3.4 (`winBy`, settlement) and `docs/plan/00-DECISIONS.md` Q2/Q3.
 2. Read the raw fixture data: `apps/web/src/data/fixtures.ts`. Read it as
    *data* — the games, teams, bets, and round outcomes. Do not read the core
-   functions it feeds.
+   functions it feeds. (It imports only `configFor` and types from
+   `@crokinole/core`, so reading it does not expose `scoreRound` or `settle`.)
+   ⚠️ **Its docstring states a derived win tally** ("Kinsey 2, Marley 1,
+   Spencer 1, Burkert 3, Burton 3"). Treat that as another answer key: derive
+   the tally yourself from the round outcomes, then compare. Do not adopt it.
 3. Compute by hand. Write your numbers to `docs/qa/findings/I/hand-computed.md`
    **and state in the report that you did this before step 4.**
 4. Only now run the app / query Convex and compare.
