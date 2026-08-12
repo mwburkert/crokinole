@@ -126,6 +126,21 @@ export interface RoundInput {
     A?: number;
     B?: number;
   };
+  /**
+   * Who took the round, when the points were never recorded at all.
+   *
+   * A round has three possible states, and conflating the last two corrupts
+   * every average built on them:
+   *   1. **Scored** — ring counts, so points are known exactly.
+   *   2. **Overridden** — someone typed a total; points are known, detail isn't.
+   *   3. **Outcome only** — this. We know who won and nothing more.
+   *
+   * State 3 is not "zero points". Recording it as 0–0 or 1–0 invents a number
+   * and drags that player's points-per-round toward a value nobody scored.
+   * Rounds in this state contribute to match points and to who won, and are
+   * excluded from every points total (§3.5).
+   */
+  resultOverride?: RoundResult;
 }
 
 export interface Round extends RoundInput {
@@ -180,6 +195,14 @@ export interface PlayerStats {
   matchPointsAgainst: number;
   roundPointsFor: number;
   roundPointsAgainst: number;
+  /**
+   * Rounds that actually carry point totals. **Divide by this for any
+   * points-per-round figure** — outcome-only rounds count toward games and
+   * match points but have no points to average. Zero means the player has no
+   * scored rounds at all, and a points average should render as unknown rather
+   * than 0.
+   */
+  roundsScored: number;
   /** Only counts rounds where per-player detail was actually entered. */
   twenties: number;
   netCents: number;

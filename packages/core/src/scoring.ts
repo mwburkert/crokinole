@@ -77,6 +77,11 @@ export interface RoundScore {
   differential: number;
   result: RoundResult;
   matchPoints: Record<TeamKey, number>;
+  /**
+   * False when the round carries only an outcome. `aPoints`/`bPoints` are 0 in
+   * that case and must not be summed or averaged — see `RoundInput.resultOverride`.
+   */
+  pointsKnown: boolean;
 }
 
 /**
@@ -92,7 +97,27 @@ export function scoreRound(
   b: RingCounts,
   cfg: ScoringConfig,
   pointsOverride?: RoundInput["pointsOverride"],
+  resultOverride?: RoundResult,
 ): RoundScore {
+  // An outcome-only round has no points to report. Returning zeros here is safe
+  // *because* `pointsKnown` is false — every consumer must check it before
+  // touching the numbers.
+  if (resultOverride) {
+    return {
+      aPoints: 0,
+      bPoints: 0,
+      differential: 0,
+      result: resultOverride,
+      matchPoints:
+        resultOverride === "tie"
+          ? { A: cfg.matchPointsTie, B: cfg.matchPointsTie }
+          : resultOverride === "A"
+            ? { A: cfg.matchPointsWin, B: 0 }
+            : { A: 0, B: cfg.matchPointsWin },
+      pointsKnown: false,
+    };
+  }
+
   const aPoints = pointsOverride?.A ?? roundPoints(a, cfg);
   const bPoints = pointsOverride?.B ?? roundPoints(b, cfg);
 
@@ -106,12 +131,12 @@ export function scoreRound(
         ? { A: cfg.matchPointsWin, B: 0 }
         : { A: 0, B: cfg.matchPointsWin };
 
-  return { aPoints, bPoints, differential: aPoints - bPoints, result, matchPoints };
+  return { aPoints, bPoints, differential: aPoints - bPoints, result, matchPoints, pointsKnown: true };
 }
 
 /** Convenience: score a `RoundInput` without unpacking it at the call site. */
 export function scoreRoundInput(round: RoundInput, cfg: ScoringConfig): RoundScore {
-  return scoreRound(round.A, round.B, cfg, round.pointsOverride);
+  return scoreRound(round.A, round.B, cfg, round.pointsOverride, round.resultOverride);
 }
 
 export interface GameStanding {
@@ -119,6 +144,9 @@ export interface GameStanding {
   roundPointsFor: Record<TeamKey, number>;
   /** Rounds played so far. */
   roundsPlayed: number;
+  /** Of those, how many actually carry point totals. Divide by this, not by
+   *  `roundsPlayed`, or outcome-only rounds silently deflate the average. */
+  roundsScored: number;
   isComplete: boolean;
   winner?: TeamKey;
 }
@@ -138,12 +166,17 @@ export function gameStanding(rounds: RoundInput[], cfg: ScoringConfig): GameStan
   const matchPoints: Record<TeamKey, number> = { A: 0, B: 0 };
   const roundPointsFor: Record<TeamKey, number> = { A: 0, B: 0 };
 
+  let roundsScored = 0;
   for (const round of rounds) {
     const score = scoreRoundInput(round, cfg);
-    roundPointsFor.A += score.aPoints;
-    roundPointsFor.B += score.bPoints;
+    // Match points always count; points only when they exist.
     matchPoints.A += score.matchPoints.A;
     matchPoints.B += score.matchPoints.B;
+    if (score.pointsKnown) {
+      roundsScored += 1;
+      roundPointsFor.A += score.aPoints;
+      roundPointsFor.B += score.bPoints;
+    }
   }
 
   const target = cfg.targetMatchPoints;
@@ -160,6 +193,7 @@ export function gameStanding(rounds: RoundInput[], cfg: ScoringConfig): GameStan
     matchPoints,
     roundPointsFor,
     roundsPlayed: rounds.length,
+    roundsScored,
     isComplete,
     ...(isComplete && leader ? { winner: leader } : {}),
   };

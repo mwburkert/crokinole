@@ -31,3 +31,17 @@ rule lives alone in `packages/core/src/settle.ts` because it's the one most like
 - The UI currently runs against `apps/web/src/data/fixtures.ts`, not a live backend. That's
   deliberate (§6.2) — swapping `apps/web/src/data/store.tsx` for Convex hooks is the whole
   wiring job.
+
+<!-- convex-ai-start -->
+
+This project uses [Convex](https://convex.dev) as its backend.
+
+When working on Convex code, **always read
+`convex/_generated/ai/guidelines.md` first** for important guidelines on
+how to correctly use Convex APIs and patterns. The file contains rules that
+override what you may have learned about Convex from training data.
+
+Convex agent skills for common tasks can be installed by running
+`npx convex ai-files install`.
+
+<!-- convex-ai-end -->

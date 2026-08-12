@@ -1,5 +1,5 @@
 /**
- * Seed data — the real first night, 7 August 2026.
+ * Seed data — the real first night, Wednesday 5 August 2026.
  *
  * Transcribed from the Discord recap. The five game results reconcile exactly
  * with the win tally posted alongside them (Kinsey 2, Marley 1, Spencer 1,
@@ -7,12 +7,10 @@
  *
  * ⚠️ **Round points were never recorded.** The recap carries only the final
  * match score per game ("6-0", "2-6", …) and its author noted they guessed at
- * the points. So each round here uses `pointsOverride` to record *who won it*
- * and nothing more — 1–0 for a win, 1–1 for a tie. Match points, standings and
- * settlements are therefore exact; anything derived from round POINTS (Pts+,
- * Pts/rd) is meaningless for this night and will look oddly low. That is
- * deliberate: inventing plausible ring counts would have made a fabrication
- * indistinguishable from a record.
+ * the points. Each round therefore uses `resultOverride` — who took it, and no
+ * claim at all about points. Match points, standings and settlements are exact;
+ * Pts+ and Pts/rd correctly report this night as having no data rather than
+ * as zero.
  *
  * The round *pattern* is also reconstructed — a 6–0 can only be three straight
  * wins, and a 1–5 can only be a tie then two losses, but 2–6 could have been
@@ -62,15 +60,20 @@ export const MEMBERS: Member[] = [
   {
     email: SUPER_ADMIN_EMAIL,
     role: "admin",
-    invitedAt: Date.UTC(2026, 7, 7),
+    invitedAt: Date.UTC(2026, 7, 5),
     playerId: "p-burkert",
     displayName: "Burkert",
     hasSignedIn: true,
   },
 ];
 
-/** 7 August 2026, the first night. */
-const NIGHT = new Date(2026, 7, 7, 19, 0, 0).getTime();
+/**
+ * Wednesday 5 August 2026, the first night.
+ *
+ * The Discord recap is stamped 8/7 — that's when it was *posted*, on the
+ * Friday morning after. The games were the Wednesday.
+ */
+const NIGHT = new Date(2026, 7, 5, 19, 0, 0).getTime();
 
 type Outcome = "A" | "B" | "tie";
 
@@ -83,10 +86,9 @@ function roundsFor(outcomes: Outcome[]): Round[] {
     index,
     A: { twenties: 0, fifteens: 0, tens: 0, fives: 0 },
     B: { twenties: 0, fifteens: 0, tens: 0, fives: 0 },
-    pointsOverride: {
-      A: outcome === "B" ? 0 : 1,
-      B: outcome === "A" ? 0 : 1,
-    },
+    // Outcome only: who won is real, the points were never recorded. NOT 1-0,
+    // which would invent a score and drag everyone's Pts/rd toward it.
+    resultOverride: outcome,
   }));
 }
 
