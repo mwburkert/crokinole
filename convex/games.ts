@@ -93,14 +93,32 @@ function assertValid(game: Parameters<typeof validateGame>[0]): void {
  *
  * A round typed into the manual menu has no `discs` at all, and its counts
  * stand on their own.
+ *
+ * ⚠️ Takes `A` and `B` as separate arguments rather than one `{A, B}` object,
+ * and rebuilds them rather than returning what it was given. The earlier
+ * version accepted a `{A, B}` fallback and was called with the mutation's whole
+ * `args`, which satisfies that shape structurally — so on the no-board path it
+ * handed back `args` itself, and `...counts` then spread `passcode`, `gameId`
+ * and `index` into the round document. It typechecked, every test passed, and
+ * every manual entry and every correction failed against the schema validator
+ * while the UI showed nothing. Two separate arguments cannot be filled by one
+ * unrelated object by accident.
  */
 function reconcile(
   config: ScoringConfig,
-  fallback: { A: RingCounts; B: RingCounts },
+  a: RingCounts,
+  b: RingCounts,
   teams: { A: { color: DiscColor }; B: { color: DiscColor } },
   discs: PlacedDisc[] | undefined,
 ): { A: RingCounts; B: RingCounts } {
-  if (!discs) return fallback;
+  if (!discs) {
+    // Rebuilt, so the result can only ever be the four counts — never whatever
+    // extra fields the caller's object happened to carry.
+    return {
+      A: { twenties: a.twenties, fifteens: a.fifteens, tens: a.tens, fives: a.fives },
+      B: { twenties: b.twenties, fifteens: b.fifteens, tens: b.tens, fives: b.fives },
+    };
+  }
 
   const limit = discsPerTeam(config);
   for (const color of ["black", "white"] as const) {
@@ -259,7 +277,7 @@ export const addRound = mutation({
     const now = Date.now();
 
     const candidate = toCoreGame(stored, existing);
-    const counts = reconcile(candidate.config, args, stored.teams, args.discs);
+    const counts = reconcile(candidate.config, args.A, args.B, stored.teams, args.discs);
 
     candidate.rounds.push({
       index,
@@ -335,7 +353,7 @@ export const updateRound = mutation({
     if (!round) throw new Error(`This game has no round ${args.index + 1}.`);
 
     const config = toCoreGame(stored, []).config;
-    const counts = reconcile(config, args, stored.teams, args.discs);
+    const counts = reconcile(config, args.A, args.B, stored.teams, args.discs);
 
     // The patch as it will be written, applied to the in-memory copy first so
     // the whole game is validated before anything lands.
