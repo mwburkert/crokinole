@@ -251,6 +251,21 @@ export function BoardScorer({
     // tap-then-hold.
     if (source.kind === "pile" || source.kind === "stash") setActive(color);
 
+    // A stash holds discs that are already ON the board (sunk in the hole), not
+    // spare ones. Dragging from it must MOVE one of those, the way dragging a
+    // placed disc does — treating it like a pile created a brand new disc, and
+    // once the pile was empty that silently did nothing while the sunk disc sat
+    // there unmoved.
+    let resolved = source;
+    if (source.kind === "stash") {
+      const sunk = [...discs]
+        .reverse()
+        .find((disc) => disc.color === color && disc.region === "twenty");
+      if (!sunk) return; // nothing in the hole to take back out
+      resolved = { kind: "disc", id: sunk.id };
+      pending.current = { source: resolved, x: point.x, y: point.y, color };
+    }
+
     cancelHold();
     holdTimer.current = window.setTimeout(() => {
       const held = pending.current;

@@ -319,13 +319,15 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 2px;
-  padding: 0.4rem 0;
+  gap: 1px;
+  /* Equal air above the glyph and below the label. */
+  padding: 0.3rem 0;
   text-decoration: none;
   color: var(--ink-soft);
-  font-size: 0.62rem;
+  font-size: 0.68rem;
   font-weight: 600;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
 }
 
 .tabbar__link[aria-current="page"] {
@@ -333,7 +335,7 @@
 }
 
 .tabbar__glyph {
-  font-size: 1.15rem;
+  font-size: 1.5rem;
   line-height: 1;
 }
 
@@ -1557,20 +1559,22 @@ html { scrollbar-width: none; }
   stroke-width: 1.5;
 }
 
-/* Big enough to read at a glance, soft enough that the board still shows. */
+/* Big enough to read at a glance, soft enough that the board still shows.
+   Walnut rather than the twenty's red — the hole is the only red thing on a
+   crokinole board and an overlay borrowing it read as a scoring mark. */
 .boardbtn__mark {
-  fill: var(--twenty);
-  opacity: 0.55;
+  fill: var(--walnut);
+  opacity: 0.5;
 }
 
 .boardbtn__plus {
-  stroke: var(--twenty);
+  stroke: var(--walnut);
   stroke-width: 6;
   /* Butt caps, not round — a square-ended cross reads as a deliberate mark on
      the board rather than a soft icon floating over it. */
   stroke-linecap: butt;
   fill: none;
-  opacity: 0.55;
+  opacity: 0.5;
 }
 
 .boardbtn__hole { fill: var(--twenty); }
@@ -1579,6 +1583,13 @@ html { scrollbar-width: none; }
 .tabbar__link--board[aria-current="page"] .boardbtn__frame {
   stroke: var(--accent);
   stroke-width: 3;
+}
+
+/* You're already here — the mark has nothing left to tell you, and hiding it
+   lets the board itself read clearly. */
+.tabbar__link--board[aria-current="page"] .boardbtn__mark,
+.tabbar__link--board[aria-current="page"] .boardbtn__plus {
+  opacity: 0;
 }
 
 /* ── Entry screen rhythm ─────────────────────────────────────────────────── */
