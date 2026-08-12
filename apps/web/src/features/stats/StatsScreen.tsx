@@ -18,6 +18,19 @@ type SortKey =
   | "twentiesPerGame"
   | "netCents";
 
+/** Column abbreviations, spelled out behind the ⓘ rather than as helper text. */
+const LEGEND: [string, string][] = [
+  ["Net", "Money won or lost, all-time"],
+  ["GP", "Games played"],
+  ["W / L", "Games won / lost"],
+  ["Win %", "Share of decided games won"],
+  ["MP+ / MP−", "Match points for / against"],
+  ["Pts+ / Pts−", "Round points for / against"],
+  ["Pts/rd", "Average round points scored"],
+  ["20s", "Discs sunk in the centre hole"],
+  ["20s/gm", "Twenties per game"],
+];
+
 /**
  * Name and Net are frozen to the left; everything else scrolls under them.
  * The two things you're always comparing against stay on screen no matter how
@@ -47,6 +60,7 @@ const COLUMNS: { key: SortKey; label: string }[] = [
 export function StatsScreen(): ReactNode {
   const rows = useLeaderboard();
   const [sort, setSort] = useState<SortKey>("netCents");
+  const [showLegend, setShowLegend] = useState(false);
 
   // Derived-on-read like everything else — these are folds over the same rows,
   // never stored (§3.2.1).
@@ -85,7 +99,34 @@ export function StatsScreen(): ReactNode {
 
   return (
     <div className="stack">
-      <Card title="Lifetime">
+      <Card
+        title="Lifetime"
+        action={
+          <button
+            type="button"
+            className="infobtn"
+            aria-label="What the columns mean"
+            aria-expanded={showLegend}
+            onClick={() => setShowLegend((current) => !current)}
+          >
+            ⓘ
+          </button>
+        }
+      >
+        {showLegend ? (
+          <dl className="legend">
+            {LEGEND.map(([term, meaning]) => (
+              <div className="legend__row" key={term}>
+                <dt>{term}</dt>
+                <dd>{meaning}</dd>
+              </div>
+            ))}
+            <p className="faint legend__note">
+              Every figure is derived from the stored rounds — nothing here is a saved total. Tap a
+              column to sort; Name and Net stay put as you scroll.
+            </p>
+          </dl>
+        ) : null}
         <div className="table-wrap">
           <table className="table table--frozen">
             <thead>
@@ -131,10 +172,6 @@ export function StatsScreen(): ReactNode {
             </tbody>
           </table>
         </div>
-        <p className="faint" style={{ marginBottom: 0 }}>
-          Scroll sideways for more. Name and Net stay put. Tap a column to sort — every figure is
-          derived from the stored rounds, nothing here is a saved total.
-        </p>
       </Card>
     </div>
   );

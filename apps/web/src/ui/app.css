@@ -1010,3 +1010,65 @@
   color: var(--ink);
   font-size: 1rem;
 }
+
+/* ── Card head with an action ────────────────────────────────────────────── */
+
+.card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--gap-sm);
+  margin-bottom: var(--gap-sm);
+}
+
+.card__head .card__title {
+  margin: 0;
+}
+
+.infobtn {
+  border: 0;
+  background: none;
+  color: var(--ink-faint);
+  font-size: 1.15rem;
+  line-height: 1;
+  min-width: 2.25rem;
+  min-height: 2.25rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.infobtn[aria-expanded="true"] {
+  color: var(--accent);
+}
+
+.legend {
+  margin: 0 0 var(--gap);
+  padding: var(--gap-sm) var(--gap);
+  background: var(--bg-sunken);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  font-size: 0.85rem;
+}
+
+.legend__row {
+  display: grid;
+  grid-template-columns: 5.5rem 1fr;
+  gap: 0.35rem;
+  padding: 0.15rem 0;
+}
+
+.legend dt {
+  font-weight: 700;
+  font-family: var(--font-num);
+}
+
+.legend dd {
+  margin: 0;
+  color: var(--ink-soft);
+}
+
+.legend__note {
+  margin: var(--gap-sm) 0 0;
+}

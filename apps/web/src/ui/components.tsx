@@ -3,14 +3,22 @@ import type { ReactNode } from "react";
 
 export function Card({
   title,
+  action,
   children,
 }: {
   title?: string;
+  /** Sits opposite the title, in line with it — an info toggle, a menu, etc. */
+  action?: ReactNode;
   children: ReactNode;
 }): ReactNode {
   return (
     <section className="card">
-      {title ? <h2 className="card__title">{title}</h2> : null}
+      {title || action ? (
+        <div className="card__head">
+          {title ? <h2 className="card__title">{title}</h2> : <span />}
+          {action}
+        </div>
+      ) : null}
       {children}
     </section>
   );
