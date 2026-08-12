@@ -262,21 +262,33 @@ export function NewGameScreen(): ReactNode {
       </Card>
 
       <Card>
-        <div className="bet-row">
+        {/*
+         * A form so Enter commits and dismisses the keyboard. The label, the $
+         * and the field are one group centred on the page, and the field grows
+         * with the number rather than the group shifting off centre.
+         */}
+        <form
+          className="bet-row"
+          onSubmit={(event) => {
+            event.preventDefault();
+            (event.currentTarget.querySelector("input") as HTMLInputElement | null)?.blur();
+          }}
+        >
           <span className="bet-row__label">Bet</span>
           <span style={{ fontSize: "1.35rem", fontWeight: 700 }}>$</span>
           <input
             className="bet-row__input"
             inputMode="decimal"
+            enterKeyHint="done"
             value={betDollars}
-            // Sized to its contents with a three-digit floor, so a $1 bet
-            // doesn't sit in a field wide enough for a mortgage but a longer
-            // number still fits without clipping.
-            style={{ width: `${Math.max(3, betDollars.length)}ch` }}
+            // Fits 999 at rest and widens as you type past it. The floor is 3
+            // rather than the current length so the box doesn't visibly shrink
+            // and grow around a single digit.
+            style={{ width: `calc(${Math.max(3, betDollars.length)}ch + 1.1rem)` }}
             onChange={(event) => setBetDollars(event.target.value)}
             aria-label="Bet per player in dollars"
           />
-        </div>
+        </form>
       </Card>
 
       <button

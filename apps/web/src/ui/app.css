@@ -291,7 +291,10 @@
   font-family: var(--font-num);
   font-size: 1.35rem;
   font-weight: 700;
+  /* Every digit the same width, or the box would jitter as you type. */
+  font-variant-numeric: tabular-nums;
   text-align: center;
+  transition: width 120ms ease;
   /* Width comes from the value's length — see NewGameScreen. */
 }
 
