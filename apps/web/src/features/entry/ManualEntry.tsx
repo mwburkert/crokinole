@@ -55,6 +55,13 @@ export function ManualEntry({
   const [draftB, setDraftB] = useState<RingCounts>({ ...b });
   const [totalA, setTotalA] = useState("");
   const [totalB, setTotalB] = useState("");
+  /**
+   * Discs that ended in the gutter. They score nothing, so they never reach
+   * `onApply` — but without somewhere to put them the disc tally can't reach
+   * 12 and "all discs accounted for" is unreachable by hand.
+   */
+  const [gutterA, setGutterA] = useState(0);
+  const [gutterB, setGutterB] = useState(0);
   /** Which round the draft above was seeded from — see the re-seed below. */
   const [loadedRound, setLoadedRound] = useState(roundIndex);
   /**
@@ -84,6 +91,8 @@ export function ManualEntry({
     setDraftB({ ...b });
     setTotalA("");
     setTotalB("");
+    setGutterA(0);
+    setGutterB(0);
     setBaseline({ a: { ...a }, b: { ...b } });
   }
 
@@ -105,6 +114,8 @@ export function ManualEntry({
     label: string,
     counts: RingCounts,
     set: (next: RingCounts) => void,
+    gutter: number,
+    setGutter: (next: number) => void,
   ): ReactNode => (
     <div className="manual__col">
       <div className="manual__head">{label}</div>
@@ -139,7 +150,39 @@ export function ManualEntry({
           </button>
         </div>
       ))}
+      <div className="manual__row">
+        <span className="manual__ring">0</span>
+        <button
+          type="button"
+          className="manual__step"
+          aria-label={`One fewer gutter disc for ${label}`}
+          onClick={() => setGutter(Math.max(0, gutter - 1))}
+        >
+          −
+        </button>
+        <input
+          className="manual__field num"
+          inputMode="numeric"
+          value={gutter}
+          aria-label={`Gutter discs for ${label}`}
+          onChange={(event) => {
+            const value = Number.parseInt(event.target.value || "0", 10);
+            setGutter(Number.isFinite(value) ? Math.max(0, value) : 0);
+          }}
+        />
+        <button
+          type="button"
+          className="manual__step"
+          aria-label={`One more gutter disc for ${label}`}
+          onClick={() => setGutter(gutter + 1)}
+        >
+          +
+        </button>
+      </div>
       <div className="manual__total num">{roundPoints(counts, config)}</div>
+      <div className="faint" style={{ textAlign: "center", fontSize: "0.7rem" }}>
+        {counts.twenties + counts.fifteens + counts.tens + counts.fives + gutter}/{budget}
+      </div>
     </div>
   );
 
@@ -192,8 +235,8 @@ export function ManualEntry({
       </div>
 
       <div className="manual__cols">
-        {column("Black", draftA, setDraftA)}
-        {column("White", draftB, setDraftB)}
+        {column("Black", draftA, setDraftA, gutterA, setGutterA)}
+        {column("White", draftB, setDraftB, gutterB, setGutterB)}
       </div>
 
       <p className="faint" style={{ margin: "0.5rem 0 0.25rem" }}>
@@ -218,7 +261,7 @@ export function ManualEntry({
         />
       </div>
 
-      <div className="row" style={{ marginTop: "0.75rem" }}>
+      <div className="row" style={{ marginTop: "0.75rem", justifyContent: "space-between" }}>
 
         {/* The only way out. Unapplied edits are lost, which is why it says
             Discard rather than Close. */}

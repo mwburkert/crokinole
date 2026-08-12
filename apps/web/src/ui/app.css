@@ -1415,10 +1415,18 @@ html { scrollbar-width: none; }
 .matchscore__dash { padding: 0 2px; }
 
 /* The controls under Finish round are secondary — they don't need full height. */
+/* Undo/redo are glyphs and need no width; giving it back lets the four buttons
+   sit lower, flanking the bulge instead of stacking above it. */
+.row--tools {
+  display: grid;
+  grid-template-columns: 1fr 2.6rem 2.6rem 1fr;
+  gap: var(--gap-sm);
+}
+
 .row--tools .btn {
   min-height: 2.4rem;
-  padding: 0 var(--gap);
-  flex: 1;
+  padding: 0 var(--gap-sm);
+  font-size: 0.85rem;
 }
 
 
@@ -1549,18 +1557,26 @@ html { scrollbar-width: none; }
   stroke-width: 1.5;
 }
 
-.boardbtn__mark { fill: var(--twenty); }
+/* Big enough to read at a glance, soft enough that the board still shows. */
+.boardbtn__mark {
+  fill: var(--twenty);
+  opacity: 0.55;
+}
 
 .boardbtn__plus {
   stroke: var(--twenty);
-  stroke-width: 4;
+  stroke-width: 6;
   stroke-linecap: round;
   fill: none;
+  opacity: 0.55;
 }
 
-.tabbar__link--board[aria-current="page"] .boardbtn {
-  box-shadow: 0 0 0 6px var(--bg-raised), 0 0 0 8px var(--accent),
-    0 3px 8px rgb(0 0 0 / 0.28);
+.boardbtn__hole { fill: var(--twenty); }
+
+/* The active ring hugs the board itself, not the collar around it. */
+.tabbar__link--board[aria-current="page"] .boardbtn__frame {
+  stroke: var(--accent);
+  stroke-width: 3;
 }
 
 /* ── Entry screen rhythm ─────────────────────────────────────────────────── */
@@ -1573,12 +1589,12 @@ html { scrollbar-width: none; }
 
 .scorer + .btn--lg,
 .scorer + .overlay + .btn--lg {
-  margin-top: 1.35rem;
+  margin-top: 1.9rem;
 }
 
 /* The secondary row stops just short of the bulge rather than tucking under it. */
 .app__main {
-  padding-bottom: calc(var(--tap) + 4.25rem);
+  padding-bottom: calc(var(--tap) + 2.4rem);
 }
 
 .row--tools {

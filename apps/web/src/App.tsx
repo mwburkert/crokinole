@@ -51,10 +51,16 @@ function TabBar(): ReactNode {
             <circle cx="24" cy="24" r="20" className="boardbtn__surface" />
             <circle cx="24" cy="24" r="13.5" className="boardbtn__ring" />
             <circle cx="24" cy="24" r="7" className="boardbtn__ring" />
+            {/* Quadrant dividers, as on the real board's outer ring. */}
+            <path
+              d="M33.5 14.5 L38.6 9.4 M14.5 14.5 L9.4 9.4 M33.5 33.5 L38.6 38.6 M14.5 33.5 L9.4 38.6"
+              className="boardbtn__ring"
+            />
+            <circle cx="24" cy="24" r="2.6" className="boardbtn__hole" />
             {live ? (
-              <path d="M20.5 18.5 L30 24 L20.5 29.5 Z" className="boardbtn__mark" />
+              <path d="M17 12 L37 24 L17 36 Z" className="boardbtn__mark" />
             ) : (
-              <path d="M24 17.5 V30.5 M17.5 24 H30.5" className="boardbtn__plus" />
+              <path d="M24 9 V39 M9 24 H39" className="boardbtn__plus" />
             )}
           </svg>
         </span>

@@ -205,5 +205,13 @@ export interface PlayerStats {
   roundsScored: number;
   /** Only counts rounds where per-player detail was actually entered. */
   twenties: number;
+  /**
+   * Rounds in which this player's twenties were actually recorded.
+   *
+   * Zero means nobody entered per-player detail — which is NOT "sank none".
+   * Same distinction as `roundsScored`: a total of 0 over 0 tracked rounds is
+   * unknown, and rendering it as a number claims a fact we don't have.
+   */
+  twentiesTracked: number;
   netCents: number;
 }

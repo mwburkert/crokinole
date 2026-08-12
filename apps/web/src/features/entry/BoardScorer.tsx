@@ -50,7 +50,7 @@ const SLOP = 10;
  * directly in front of each seat — a circle in a square leaves the corners free,
  * whereas above and below the board there is nothing to spare.
  */
-const VIEW = 232;
+const VIEW = 246;
 const BOARD_TOP = 32;
 
 /** Board space (0–200, centred 100,100) -> SVG space. */
@@ -83,8 +83,8 @@ interface Drag {
  * colour you meant, so there was never a reason to state it separately first.
  */
 const PILES: { x: number; y: number; team: "A" | "B" }[] = [
-  { x: 21, y: 179, team: "A" },
-  { x: 179, y: 179, team: "B" },
+  { x: 13, y: 194, team: "A" },
+  { x: 187, y: 194, team: "B" },
 ];
 
 export interface BoardScorerProps {
@@ -200,7 +200,12 @@ export function BoardScorer({
     const text = region === "ditch" ? "Gutter!" : `+${points}`;
     // Centre the twenty on the board rather than on the disc — it's an event,
     // not an annotation.
-    const at = region === "twenty" ? { x: BOARD_CENTRE, y: BOARD_CENTRE + BOARD_TOP } : { x, y };
+    // Clamp inside the viewBox — a "Gutter!" against the left or right rim was
+    // being cut in half by the edge of the SVG.
+    const at =
+      region === "twenty"
+        ? { x: BOARD_CENTRE, y: BOARD_CENTRE + BOARD_TOP }
+        : { x: Math.min(Math.max(x, 26), 174), y: Math.max(y, 12) };
 
     setFlash({ id, text, kind, ...at });
     window.setTimeout(

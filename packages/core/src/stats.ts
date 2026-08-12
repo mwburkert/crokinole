@@ -28,6 +28,7 @@ function emptyStats(playerId: PlayerId): PlayerStats {
     roundPointsAgainst: 0,
     roundsScored: 0,
     twenties: 0,
+    twentiesTracked: 0,
     netCents: 0,
   };
 }
@@ -82,6 +83,7 @@ export function aggregateStats(
     for (const entry of settle(game)) settlements.set(entry.playerId, entry.netCents);
 
     const twentiesByPlayer = new Map<PlayerId, number>();
+    const trackedByPlayer = new Map<PlayerId, number>();
     for (const round of game.rounds) {
       for (const stat of round.playerStats ?? []) {
         if (stat.twenties === undefined) continue;
@@ -89,6 +91,7 @@ export function aggregateStats(
           stat.playerId,
           (twentiesByPlayer.get(stat.playerId) ?? 0) + stat.twenties,
         );
+        trackedByPlayer.set(stat.playerId, (trackedByPlayer.get(stat.playerId) ?? 0) + 1);
       }
     }
 
@@ -110,6 +113,7 @@ export function aggregateStats(
         row.roundPointsAgainst += standing.roundPointsFor[against];
         row.roundsScored += standing.roundsScored;
         row.twenties += twentiesByPlayer.get(playerId) ?? 0;
+        row.twentiesTracked += trackedByPlayer.get(playerId) ?? 0;
         row.netCents += settlements.get(playerId) ?? 0;
       }
     }

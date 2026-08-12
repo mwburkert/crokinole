@@ -27,7 +27,7 @@ const LEGEND: [string, string][] = [
   ["MP+ / MP−", "Match points for / against"],
   ["Pts+ / Pts−", "Round points for / against"],
   ["Pts/rd", "Average round points — over rounds where points were recorded. — means none were."],
-  ["20s", "Discs sunk in the centre hole"],
+  ["20s", "Twenties sunk — only where per-player detail was entered. — means untracked."],
   ["20s/gm", "Twenties per game"],
 ];
 
@@ -76,7 +76,9 @@ export function StatsScreen(): ReactNode {
             // read as "scored nothing" rather than "not recorded".
             pointsPerRound:
               row.roundsScored > 0 ? row.roundPointsFor / row.roundsScored : null,
-            twentiesPerGame: row.gamesPlayed > 0 ? row.twenties / row.gamesPlayed : 0,
+            // Same rule as Pts/rd: untracked is not zero.
+            twentiesPerGame:
+              row.twentiesTracked > 0 ? row.twenties / row.gamesPlayed : null,
           };
         }),
     [rows],
@@ -168,8 +170,8 @@ export function StatsScreen(): ReactNode {
                   <td className="num">{row.roundPointsFor}</td>
                   <td className="num">{row.roundPointsAgainst}</td>
                   <td className="num">{row.pointsPerRound === null ? "—" : row.pointsPerRound.toFixed(1)}</td>
-                  <td className="num">{row.twenties}</td>
-                  <td className="num">{row.twentiesPerGame.toFixed(1)}</td>
+                  <td className="num">{row.twentiesTracked > 0 ? row.twenties : "—"}</td>
+                  <td className="num">{row.twentiesPerGame === null ? "—" : row.twentiesPerGame.toFixed(1)}</td>
                 </tr>
               ))}
             </tbody>
