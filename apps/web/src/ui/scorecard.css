@@ -362,3 +362,74 @@
     transform: scaleX(1);
   }
 }
+
+
+/* ── Reveal choreography ─────────────────────────────────────────────────── */
+
+/*
+ * The card lands showing the headers, every round already played, and the new
+ * round's label — then pauses, draws that round's marks, fades its points in,
+ * pauses again, and drops the match score.
+ *
+ * Everything below overrides the generic cascade so the *newest* round carries
+ * the timing. Earlier rounds re-animating on every card made the round that had
+ * just been played impossible to spot.
+ */
+:root {
+  --scorecard-hold: 900ms;
+}
+
+/* Settled rounds: present immediately, no stagger. */
+.scorecard__row {
+  animation-delay: 0ms;
+}
+
+.scorecard__row .scorecard__mark,
+.scorecard__row .scorecard__points {
+  animation-delay: 0ms;
+}
+
+/* The new round's label arrives with the rest; its marks wait. */
+.scorecard__row[data-latest="true"] .scorecard__mark {
+  animation-duration: 420ms;
+  animation-delay: var(--scorecard-hold);
+}
+
+.scorecard__row[data-latest="true"] .scorecard__points {
+  animation-delay: calc(var(--scorecard-hold) + 420ms);
+}
+
+/* Then a shorter pause, and the match score swipes down into place. */
+.scorecard__rule {
+  animation-delay: calc(var(--scorecard-hold) + 700ms);
+}
+
+.scorecard tfoot .scorecard__row {
+  animation: scorecard-drop 420ms cubic-bezier(0.2, 0.8, 0.3, 1.1) backwards;
+  animation-delay: calc(var(--scorecard-hold) + 820ms);
+}
+
+.scorecard tfoot .scorecard__row .scorecard__mark,
+.scorecard tfoot .scorecard__row .scorecard__points {
+  animation-delay: calc(var(--scorecard-hold) + 820ms);
+}
+
+@keyframes scorecard-drop {
+  from { opacity: 0; transform: translateY(-14px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.scorecard__done {
+  animation-delay: calc(var(--scorecard-hold) + 1150ms);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scorecard__row,
+  .scorecard__mark,
+  .scorecard__points,
+  .scorecard__rule,
+  .scorecard tfoot .scorecard__row,
+  .scorecard__done {
+    animation-delay: 0ms !important;
+  }
+}
