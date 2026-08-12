@@ -1131,17 +1131,21 @@
 
 .scorer__flash {
   font-family: var(--font-num);
-  font-size: 15px;
+  font-size: 17px;
   font-weight: 800;
   fill: var(--accent);
   text-anchor: middle;
   pointer-events: none;
-  animation: flash-up 700ms ease-out forwards;
+  /* Holds at full strength first, then rises and fades — a flash that starts
+     fading immediately reads as a glitch rather than a score. */
+  animation: flash-up 1500ms cubic-bezier(0.2, 0.6, 0.3, 1) forwards;
 }
 
 @keyframes flash-up {
-  from { opacity: 1; transform: translateY(0); }
-  to { opacity: 0; transform: translateY(-16px); }
+  0% { opacity: 0; transform: translateY(4px) scale(0.8); }
+  12% { opacity: 1; transform: translateY(0) scale(1.1); }
+  30% { opacity: 1; transform: translateY(-4px) scale(1); }
+  100% { opacity: 0; transform: translateY(-34px) scale(1); }
 }
 
 .scorer__toggle {
@@ -1392,4 +1396,39 @@ html { scrollbar-width: none; }
   min-height: 2.4rem;
   padding: 0 var(--gap);
   flex: 1;
+}
+
+
+/* ── Drag affordances ────────────────────────────────────────────────────── */
+
+/* The held disc rides above the fingertip; the tether shows what it belongs to. */
+.scorer__tether {
+  stroke: var(--accent);
+  stroke-width: 1.2;
+  stroke-dasharray: 2 2;
+  opacity: 0.75;
+}
+
+.scorer__disc.is-ghost {
+  filter: drop-shadow(0 3px 3px rgb(0 0 0 / 0.45));
+  opacity: 0.95;
+}
+
+/* Hovered region: a filled band plus a bright edge on both boundaries. */
+.scorer__zoneband {
+  stroke: color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+.scorer__zoneband.is-ditch {
+  stroke: color-mix(in srgb, var(--negative) 42%, transparent);
+}
+
+.scorer__zoneedge {
+  stroke: var(--accent);
+  stroke-width: 2;
+}
+
+.scorer__zoneedge.is-ditch {
+  stroke: var(--negative);
+  stroke-width: 2.5;
 }

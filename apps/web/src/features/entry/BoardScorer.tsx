@@ -26,7 +26,17 @@ import { useCallback, useEffect, useRef, useState, type PointerEvent, type React
  */
 
 /** How long a press must last before it becomes a drag. */
-const HOLD_MS = 170;
+const HOLD_MS = 130;
+/**
+ * How far above the fingertip the dragged disc rides, in board units.
+ *
+ * The "offset cursor" pattern. On a phone your finger completely covers a disc
+ * this size, so you're dragging something you can't see and guessing at the
+ * drop. Lifting it clear is the single biggest improvement to touch drag —
+ * and the hit-test uses the LIFTED position, not the finger, so what you see
+ * is exactly what lands.
+ */
+const LIFT = 34;
 /** How long a disc must hover the centre before the hole is fully open. */
 const HOLE_OPEN_MS = 650;
 /** How far the hole opens, as a multiple of its resting radius. */
@@ -161,6 +171,15 @@ export function BoardScorer({
   };
 
   /** A twenty is the moment of the round, so it gets the loudest treatment. */
+  /** A short haptic bump. Confirms a grab you can feel without looking. */
+  const buzz = (ms: number): void => {
+    try {
+      navigator.vibrate?.(ms);
+    } catch {
+      // Unsupported or blocked — purely additive feedback.
+    }
+  };
+
   const showFlash = (region: Region, x: number, y: number): void => {
     const points = pointsFor(region);
     flashId.current += 1;
@@ -216,6 +235,7 @@ export function BoardScorer({
         y: held.y,
         ...(held.source.kind === "disc" ? { movingId: held.source.id } : {}),
       });
+      buzz(14);
       holdTimer.current = null;
     }, HOLD_MS);
   };
@@ -235,7 +255,13 @@ export function BoardScorer({
     }
 
     setDrag({ ...drag, x: point.x, y: point.y });
-    setHover(regionAt(point.x, point.y));
+    const next = regionAt(point.x, point.y - LIFT);
+    if (next !== hover) {
+      setHover(next);
+      // A second bump when you cross into a new region, so you can feel the
+      // target change without watching for it.
+      if (next) buzz(8);
+    }
   };
 
   const handleUp = (event: PointerEvent): void => {
@@ -266,7 +292,9 @@ export function BoardScorer({
     }
 
     pending.current = null;
-    const dropped = point ?? { x: drag.x, y: drag.y };
+    // Drop where the DISC is, not where the finger is.
+    const raw = point ?? { x: drag.x, y: drag.y };
+    const dropped = { x: raw.x, y: raw.y - LIFT };
     const region = regionAt(dropped.x, dropped.y);
     setDrag(null);
     setHover(null);
@@ -323,6 +351,7 @@ export function BoardScorer({
         onPointerCancel={handleUp}
       >
         <BoardArt hover={hover} holeGrow={holeGrow} />
+        <RegionHighlight region={hover} />
 
         {/* Twenties, laid out in a row directly under each score card so the
             two sides read at a glance without anyone counting a number. */}
@@ -358,7 +387,7 @@ export function BoardScorer({
               key={disc.id}
               cx={view.x}
               cy={view.y}
-              r={isDragging ? DISC_RADIUS * 1.5 : isActive ? DISC_RADIUS * 1.15 : DISC_RADIUS * 0.75}
+              r={isDragging ? DISC_RADIUS * 0.9 : isActive ? DISC_RADIUS * 1.15 : DISC_RADIUS * 0.75}
               className={`scorer__disc scorer__disc--${disc.color}${isDragging ? " is-dragging" : ""}`}
               opacity={isDragging ? 0.55 : isActive ? 1 : 0.5}
               style={{ pointerEvents: isActive ? "auto" : "none" }}
@@ -369,15 +398,25 @@ export function BoardScorer({
           );
         })}
 
-        {/* The disc under your finger. */}
+        {/* The disc you're holding, riding above the fingertip and enlarged so
+            it clears a thumb. A crosshair marks the exact landing point, since
+            the disc is no longer where your finger is. */}
         {drag ? (
-          <circle
-            cx={toView(drag.x, drag.y).x}
-            cy={toView(drag.x, drag.y).y}
-            r={DISC_RADIUS * 1.4}
-            className={`scorer__disc scorer__disc--${drag.color} is-ghost`}
-            opacity={0.65}
-          />
+          <g style={{ pointerEvents: "none" }}>
+            <line
+              x1={toView(drag.x, drag.y).x}
+              y1={toView(drag.x, drag.y).y}
+              x2={toView(drag.x, drag.y - LIFT).x}
+              y2={toView(drag.x, drag.y - LIFT).y + DISC_RADIUS * 2.1}
+              className="scorer__tether"
+            />
+            <circle
+              cx={toView(drag.x, drag.y - LIFT).x}
+              cy={toView(drag.x, drag.y - LIFT).y}
+              r={DISC_RADIUS * 2.1}
+              className={`scorer__disc scorer__disc--${drag.color} is-ghost`}
+            />
+          </g>
         ) : null}
 
         {flash ? (
@@ -446,6 +485,47 @@ function BoardArt({
   );
 }
 
+/**
+ * The hovered region, called out properly: a filled band plus a bright edge on
+ * BOTH of its boundaries. Brightening the fill alone was too subtle to read
+ * mid-drag, and it never showed which two lines the disc had to stay between.
+ */
+function RegionHighlight({ region }: { region: Region | null }): ReactNode {
+  if (!region || region === "twenty") return null;
+
+  const bounds: Record<Exclude<Region, "twenty">, [number, number]> = {
+    fifteen: [RADII.twenty, RADII.fifteen],
+    ten: [RADII.fifteen, RADII.ten],
+    five: [RADII.ten, RADII.five],
+    ditch: [RADII.five, RADII.ditch],
+  };
+  const [inner, outer] = bounds[region];
+  const mid = (inner + outer) / 2;
+
+  return (
+    <g style={{ pointerEvents: "none" }} className="scorer__zone">
+      <circle
+        cx={BOARD_CENTRE}
+        cy={BOARD_CENTRE + BOARD_TOP}
+        r={mid}
+        fill="none"
+        strokeWidth={outer - inner}
+        className={`scorer__zoneband${region === "ditch" ? " is-ditch" : ""}`}
+      />
+      {[inner, outer].map((r) => (
+        <circle
+          key={r}
+          cx={BOARD_CENTRE}
+          cy={BOARD_CENTRE + BOARD_TOP}
+          r={r}
+          fill="none"
+          className={`scorer__zoneedge${region === "ditch" ? " is-ditch" : ""}`}
+        />
+      ))}
+    </g>
+  );
+}
+
 function Pile({
   seat,
   x,
@@ -468,12 +548,15 @@ function Pile({
   return (
     <g
       className={`scorer__pile${selected ? " is-selected" : ""}`}
-      opacity={selected ? 1 : 0.55}
+      opacity={selected ? 1 : 0.8}
       onPointerDown={(event) => onDown(event, { kind: "pile", seat, color }, color)}
       role="button"
       aria-pressed={selected}
       aria-label={`${color} discs, ${count} of ${total} left`}
     >
+      {/* A press target far larger than the discs it holds — a pile is the most
+          reached-for thing on this screen and it sits in a corner. */}
+      <circle cx={x} cy={y - 1.5} r={DISC_RADIUS + 13} fill="transparent" />
       {/* Selection ring — the pile doubles as the colour toggle. */}
       <circle cx={x} cy={y - 1.5} r={DISC_RADIUS + 4} className="scorer__pilering" />
       {/* A fixed stack image: it never resizes as discs leave, only the count changes. */}
