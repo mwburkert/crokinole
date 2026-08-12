@@ -134,7 +134,13 @@ export function BoardScorer({
 
   const svgRef = useRef<SVGSVGElement | null>(null);
   const holdTimer = useRef<number | null>(null);
-  const pending = useRef<{ source: Source; x: number; y: number; color: DiscColor } | null>(null);
+  const pending = useRef<{
+    source: Source;
+    x: number;
+    y: number;
+    color: DiscColor;
+    at: number;
+  } | null>(null);
   const flashId = useRef(0);
 
   const left = remaining(discs, perTeam);
@@ -247,7 +253,7 @@ export function BoardScorer({
     } catch {
       // Not capturable — carry on uncaptured.
     }
-    pending.current = { source, x: point.x, y: point.y, color };
+    pending.current = { source, x: point.x, y: point.y, color, at: performance.now() };
 
     // Touching a pile or stash selects that colour immediately — the same
     // gesture that starts a drag also sets the toggle, so there is never a
@@ -266,10 +272,18 @@ export function BoardScorer({
         .find((disc) => disc.color === color && disc.region === "twenty");
       if (!sunk) return; // nothing in the hole to take back out
       resolved = { kind: "disc", id: sunk.id };
-      pending.current = { source: resolved, x: point.x, y: point.y, color };
+      pending.current = { source: resolved, x: point.x, y: point.y, color, at: performance.now() };
     }
 
     cancelHold();
+
+    // Bare board is TAP to place, never hold to drag. Holding on empty board
+    // was starting a drag with nothing in hand and conjuring a disc on release
+    // — most obviously over the hole, where a long press grew it open and then
+    // dropped a twenty you never picked up. You place by tapping and move by
+    // holding; holding nothing should do nothing.
+    if (resolved.kind === "board") return;
+
     holdTimer.current = window.setTimeout(() => {
       const held = pending.current;
       if (!held) return;
@@ -321,6 +335,11 @@ export function BoardScorer({
       // A short press on an existing disc is a no-op — you have to hold to move
       // it, which is what stops a stray tap dragging a disc you meant to keep.
       if (start.source.kind === "disc") return;
+      // A TAP places; a long press does not. Stopping the hold from starting a
+      // drag wasn't enough on its own — releasing still fell through to here and
+      // placed a disc, so holding on the hole grew it open and then dropped a
+      // twenty you never picked up.
+      if (start.source.kind === "board" && performance.now() - start.at > HOLD_MS) return;
       // Tapping a pile or stash just selects that colour; only a hold takes a
       // disc from it.
       if (start.source.kind === "pile" || start.source.kind === "stash") {
