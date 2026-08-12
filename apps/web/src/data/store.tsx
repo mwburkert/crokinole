@@ -66,6 +66,15 @@ export interface RoundDetail {
   discs?: PlacedDisc[];
   /** Per-player twenties, when someone bothered to break them down. */
   playerStats?: RoundPlayerStat[];
+  /**
+   * A total someone typed, when the round was logged without any detail.
+   *
+   * Replaces the derived total for that side (§3.3). Deliberately distinct from
+   * ring counts of zero, which claim nobody scored — this claims only that the
+   * sections weren't recorded. Without it "Black 60 / White 45" commits as 0–0,
+   * a tie, silently, with the night's money riding on it.
+   */
+  pointsOverride?: { A?: number; B?: number };
 }
 
 interface StoreValue {
@@ -436,13 +445,17 @@ export function StoreProvider({ children }: { children: ReactNode }): ReactNode 
     [createMutation, passcode],
   );
 
-  /** `discs` and `playerStats` share one shape across add and update. */
-  type DetailArgs = Pick<Parameters<typeof addRoundMutation>[0], "discs" | "playerStats">;
+  /** The optional half of a round, shaped the same for add and update. */
+  type DetailArgs = Pick<
+    Parameters<typeof addRoundMutation>[0],
+    "discs" | "playerStats" | "pointsOverride"
+  >;
   const detailArgs = (detail?: RoundDetail): DetailArgs => ({
     ...(detail?.discs ? { discs: detail.discs } : {}),
     ...(detail?.playerStats
       ? { playerStats: detail.playerStats as DetailArgs["playerStats"] }
       : {}),
+    ...(detail?.pointsOverride ? { pointsOverride: detail.pointsOverride } : {}),
   });
 
   const addRound = useCallback(

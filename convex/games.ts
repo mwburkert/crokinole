@@ -347,6 +347,18 @@ export const updateRound = mutation({
       discs: args.discs,
       pointsOverride: args.pointsOverride,
       playerStats: args.playerStats,
+      /**
+       * Correcting a round always ends its outcome-only state.
+       *
+       * `resultOverride` means "we know who took it and nothing else" — it
+       * short-circuits scoring entirely, so leaving it in place would let a
+       * correction write counts that `scoreRoundInput` then ignores. Every
+       * round of the 5 August night is in exactly that state (the recap never
+       * carried points), so the first person to fix one would have watched
+       * their numbers vanish. Typing counts or a total *is* the act of
+       * recording the points, which is the one thing this flag says nobody did.
+       */
+      resultOverride: undefined,
       updatedAt: Date.now(),
     };
 

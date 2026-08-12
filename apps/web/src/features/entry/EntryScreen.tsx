@@ -1,6 +1,7 @@
 import {
   countsFromDiscs,
   discsPerTeam,
+  EMPTY_RING_COUNTS,
   gameStanding,
   placementComplete,
   remaining,
@@ -196,6 +197,11 @@ export function EntryScreen(): ReactNode {
     addRound(gameId, a, b, {
       ...(boardIsSource ? { discs } : {}),
       ...(playerStats ? { playerStats } : {}),
+      // A typed total has to travel or the round lands as 0–0 — a tie, silently.
+      // The counts alongside it are zeros by construction: `setTotals` clears
+      // both the board and the manual counts, because a total is what you log
+      // *instead of* the detail, not as well as it.
+      ...(totals ? { pointsOverride: { A: totals.a, B: totals.b } } : {}),
     });
     reset();
     setShowCard(true);
@@ -248,7 +254,25 @@ export function EntryScreen(): ReactNode {
             // Editing a committed round writes straight through; the board
             // behind the overlay stays on the live round either way.
             if (editing !== null && gameId) {
-              if ("totals" in next) return;
+              if ("totals" in next) {
+                /*
+                 * A total typed over a committed round replaces whatever detail
+                 * it had. It used to `return` here — the sheet looked saved and
+                 * nothing was written, which is the worst of the three possible
+                 * behaviours.
+                 *
+                 * Everything else goes: zero counts (the sections are no longer
+                 * claimed, and `pointsOverride` is what supplies the total), no
+                 * board (positions that no longer describe the round), and no
+                 * per-player twenties (they reconcile against a twenties count
+                 * that is now zero). The mutation clears what it isn't given.
+                 */
+                updateRound(gameId, editing, EMPTY_RING_COUNTS, EMPTY_RING_COUNTS, {
+                  pointsOverride: { A: next.totals.a, B: next.totals.b },
+                });
+                setEditTouched(false);
+                return;
+              }
               const round = game.rounds[editing];
               // The stored board survives only while it still describes these
               // counts. Positions are the source of truth when present (§3.5),
