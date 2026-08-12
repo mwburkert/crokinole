@@ -214,6 +214,7 @@ export const DEFAULT_SCORING: ScoringConfig = {
   matchPointsWin: 2,
   matchPointsTie: 1,
   targetMatchPoints: 5,
+  winBy: 2,                   // added 2026-08-12 — see below
   discsPerPlayer: 6,          // 8 when format === "singles"
 };
 
@@ -249,7 +250,26 @@ export function aggregateStats(games: Game[], rounds: RoundsByGame, cfg): Player
 ```
 
 **Game-length sanity check:** to 5 match points at 2/win and 1/tie, a game is **3 rounds
-minimum** (2+2+1 = 5, or 2+2+2 = 6). Worth encoding as a test.
+minimum** (2+2+1 = 5, or 2+2+2 = 6). Encoded as a test.
+
+### `winBy` — added 2026-08-12
+
+A game is complete when a side reaches `targetMatchPoints` **and leads by at least `winBy`**.
+Default **2**: 5–3 ends it, 5–4 keeps playing. `winBy: 1` gives first-past-the-target.
+
+Two things this settles:
+
+- **A game can never end level.** At 4–4 a tied round takes both sides to 5; under the original
+  "first to 5" reading that would declare both teams winners, which is nonsense with money on
+  the table.
+- **§3.8's proposed property test is wrong** and was replaced. It asked that match points never
+  exceed `target+1`; with ties and a margin requirement a game can finish 7–5 or beyond.
+
+> ⚠️ **This is a house rule, not an NCA rule.** Searching turned up that NCA regular play is a
+> **fixed four rounds per game** rather than a race to a target — the primary rules page 404s
+> and Tracey Boards 403s, so treat that as one search-summary source, unverified. "Win by two"
+> appears in NCA material only as a tiebreaker format. Both `targetMatchPoints` and `winBy` are
+> therefore yours to set, which is exactly why they're config rather than constants.
 
 ### Settlement — confirmed rule
 
@@ -333,11 +353,19 @@ simpler but no less important: confirm that **no** query serves data without ide
 This is used standing next to a board, one-handed, possibly with a beer. Everything else can
 be mediocre; this can't.
 
-1. **Setup (once per game).** Date defaults to today. **Doubles/singles toggle, defaulting to
-   doubles** — it sets `discsPerPlayer` and how many players the picker asks for. Pick players
-   from chips; recent partnerships surface first. Tap to assign into two sides; a single "swap"
-   control flips partners. Pick which side is black. Bet: one number input that **autofills
-   every player**, with a disclosure to override individuals.
+1. **Setup (once per game).** Date defaults to today. A **Doubles/Singles** toggle — labelled
+   just that, since nobody needs reminding how many discs they get — sets `discsPerPlayer` and
+   how many seats appear.
+
+   **Built 2026-08-12 as a board with a seat on each side**, rather than the chip-picker this
+   section originally described. **Partners sit across from each other**, so top+bottom is one
+   team and left+right the other, and the seating picture carries the whole team structure. That
+   removes both "swap sides" and "swap partners" — changing a partner is just picking a different
+   name in a seat. "Flip colours" stays, because which side plays black is a real choice the
+   layout can't express. Singles collapses to two seats, top and bottom.
+
+   Bet is a single field titled **Bet** with a `$` prefix, **defaulting to $1**, autofilling
+   every player.
 2. **Round entry.** Two columns, black and white. Each has four steppers: `20 / 15 / 10 / 5`.
    Big `+` targets, tap-and-hold to decrement. Live under each column: that team's round total.
    Between them, in the largest type on screen: **the differential** and who's winning it.
@@ -352,6 +380,62 @@ be mediocre; this can't.
 
 **Undo** must be reachable from the round entry screen. The most common real error is
 committing a round with a mis-tapped count.
+
+### The board scorer — specified 2026-08-12, not yet built
+
+Round entry becomes the board itself rather than eight steppers. Discs are placed where they
+actually came to rest, and the ring counts are **derived from those positions**.
+
+**Placement.** A colour toggle — two plain swatches, no text. A tap drops a disc into whichever
+section the tap centres on; ambiguous taps still place, because drag corrects them. Tap-and-hold
+grows the disc and drops its opacity to show it's grabbed; the target section highlights and
+pulses as the disc enters its hitbox.
+
+**⚠️ Every drag needs a hold buffer.** A drag must not engage on first contact — it waits for a
+short press (~180ms) or a deliberate movement threshold. Without it, a thumb resting on the board
+while scrolling flings discs around, and on a phone that is the difference between a scorer you
+trust and one you fight.
+
+**Piles.** Six per seat, four seats, 24 discs in play. A fixed repeated image that does not resize
+while dragging, with a counter. **When a seat's pile empties, drags from it pull from the
+partner's pile** until that is empty too — you should never have to reach across the board to
+find a disc that exists.
+
+**Stashes.** One per team, inboard of that team's score, holding their twenties. Dragging from a
+stash grabs that team's colour **and flips the toggle to match** — as does dragging from the other
+team's pile. The toggle follows what you actually grabbed rather than making you set it first.
+
+**The active colour is larger and interactive; the other side shrinks and goes inert.** That is
+what keeps 24 discs legible on a 393px board.
+
+**Twenties** animate up to their team's stash and **stay draggable back out of it**, because a
+disc that leaves the board with no way back is a mis-tap you cannot fix.
+
+**The ditch is a real drop zone.** This is what makes "all 24 accounted for" a satisfiable
+condition rather than a nag — discs in the ditch score nothing but are legitimately placed.
+
+**The score line** under each team's score card is a fixed underline in that team's colour. Not
+proportional; it labels ownership, nothing more.
+
+#### ⚠️ Positions are stored, and that is a real exception to §3.2.1
+
+`rounds` gains a `discs` array of `{ color, x, y, region }`. Position is **not derivable** from
+ring counts, so this is the first stored value that isn't a raw input — accepted deliberately, to
+replay a board later.
+
+It creates two sources for one number, so the rule is explicit: **positions are the source of
+truth when present, and ring counts are recomputed from them on every write.** They can never
+disagree. A round entered through the manual menu simply has no positions, and its counts stand
+on their own.
+
+#### Manual entry
+
+Behind a three-dot menu above the scoreboard: small +/− controls, directly editable number
+fields, and a total-score field for logging a round without detail. Section counts entered here
+**populate the board when the menu closes**.
+
+Committing with detail incomplete prompts: *"Place X more discs to record detailed scoring"*, with
+*"skipping will only record total score"* beneath, and **Back** / **Skip** options.
 
 ### Stats (Phase 1 scope only)
 

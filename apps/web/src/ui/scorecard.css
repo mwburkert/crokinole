@@ -1,0 +1,364 @@
+/*
+ * The end-of-match scorecard.
+ *
+ * Everything else in the app is a card in the app's own chrome. This one is
+ * drawn as paper — a sheet sitting slightly off-square, ruled rows, marks in
+ * pen — because it's the artefact the night produces, and it's the one moment
+ * where looking like software would be a loss.
+ *
+ * Colour is entirely from tokens.css, so the same sheet reads as cream paper in
+ * light mode and as a lit page in dark mode without a second palette.
+ */
+
+.scorecard {
+  /*
+   * Handwriting where a system face exists, the normal UI font everywhere else
+   * (most Android). Nothing about the layout depends on which one lands, and
+   * every number stays in --font-num so the score is never the part you have to
+   * squint at.
+   */
+  --scorecard-hand: "Bradley Hand", "Segoe Script", "Segoe Print", "Brush Script MT", var(--font);
+  /* One beat per row. Every delay is a multiple of it, so the cascade stays in
+     step however many rounds were played. */
+  --scorecard-beat: 95ms;
+
+  display: flex;
+  justify-content: center;
+  padding: var(--gap-sm) 0;
+}
+
+.scorecard__sheet {
+  width: 100%;
+  /* Fits a 393px viewport with room for the app's own gutters. */
+  max-width: 21.5rem;
+  padding: var(--gap) var(--gap) var(--gap);
+  background: var(--bg-raised);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  /* The hard second shadow is a sheet underneath, not a glow. */
+  box-shadow: var(--shadow), 5px 6px 0 -1px var(--bg-sunken);
+  transform: rotate(-0.6deg);
+  animation: scorecard-land 480ms cubic-bezier(0.18, 0.9, 0.28, 1.15) backwards;
+}
+
+.scorecard__title {
+  margin: 0 0 var(--gap-sm);
+  text-align: center;
+  font-family: var(--scorecard-hand);
+  font-size: 1.15rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--ink-soft);
+}
+
+.scorecard__table {
+  width: 100%;
+  /* Fixed layout keeps the two name columns equal, so the marks line up in a
+     column down the sheet even when one pair has much longer names. */
+  table-layout: fixed;
+  border-collapse: collapse;
+}
+
+/* ── Column heads ────────────────────────────────────────────────────────── */
+
+.scorecard__team {
+  padding: 0 0.15rem 0.45rem;
+  vertical-align: bottom;
+  text-align: center;
+  font-family: var(--scorecard-hand);
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--ink);
+  /* Two names joined by "&" can be 27 characters; wrap rather than shrink. */
+  overflow-wrap: anywhere;
+  border-bottom: 2px solid var(--ink-faint);
+}
+
+.scorecard__roundhead {
+  /* Sized for "Round 10" on one line. */
+  width: 5.5rem;
+  border-bottom: 2px solid var(--ink-faint);
+}
+
+.scorecard__swatch {
+  display: block;
+  width: 0.85rem;
+  height: 0.85rem;
+  margin: 0 auto 0.2rem;
+  border-radius: 50%;
+  border: 1px solid var(--walnut);
+}
+
+.scorecard__swatch--black {
+  background: var(--disc-black);
+}
+
+.scorecard__swatch--white {
+  background: var(--disc-white);
+}
+
+/* ── Round rows ──────────────────────────────────────────────────────────── */
+
+.scorecard__row {
+  animation: scorecard-row-in 360ms ease-out backwards;
+  animation-delay: calc(var(--scorecard-i, 0) * var(--scorecard-beat));
+}
+
+.scorecard__cell {
+  padding: 0.3rem 0.15rem 0.35rem;
+  text-align: center;
+  border-bottom: 1px solid var(--line);
+}
+
+.scorecard__round {
+  padding: 0.3rem 0.15rem;
+  font-family: var(--scorecard-hand);
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: var(--ink-soft);
+  white-space: nowrap;
+  border-bottom: 1px solid var(--line);
+}
+
+.scorecard__points {
+  display: block;
+  margin-top: 0.1rem;
+  font-family: var(--font-num);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.72rem;
+  color: var(--ink-faint);
+}
+
+/* ── Marks ───────────────────────────────────────────────────────────────── */
+
+.scorecard__mark {
+  display: block;
+  width: 1.7rem;
+  height: 1.7rem;
+  margin: 0 auto;
+  fill: none;
+  stroke-width: 2.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* Nothing drawn by hand sits perfectly square, and the alternation is cheap. */
+.scorecard__row:nth-of-type(odd) .scorecard__mark {
+  transform: rotate(-4deg);
+}
+
+.scorecard__row:nth-of-type(even) .scorecard__mark {
+  transform: rotate(3deg);
+}
+
+.scorecard__mark--win {
+  stroke: var(--positive);
+}
+
+.scorecard__mark--loss {
+  stroke: var(--negative);
+}
+
+/* A tie is a plain hyphen in both columns — ink, not a verdict colour. */
+.scorecard__mark--tie {
+  stroke: var(--ink);
+}
+
+/*
+ * pathLength="1" on every stroke normalises its length, so one dash animation
+ * writes a check, a cross, or a ring on without knowing their geometry.
+ */
+.scorecard__stroke {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 0;
+  animation: scorecard-draw 240ms ease-out backwards;
+  animation-delay: calc(var(--scorecard-i, 0) * var(--scorecard-beat) + 150ms);
+}
+
+/* The second bar of the X follows the first rather than racing it. */
+.scorecard__stroke--second {
+  animation-delay: calc(var(--scorecard-i, 0) * var(--scorecard-beat) + 260ms);
+}
+
+/* ── Rule and match score ────────────────────────────────────────────────── */
+
+.scorecard__rulecell {
+  padding: 0.5rem 0 0.4rem;
+  border: 0;
+}
+
+.scorecard__rule {
+  display: block;
+  height: 2px;
+  background: var(--ink-soft);
+  transform-origin: left center;
+  animation: scorecard-rule 300ms ease-out backwards;
+  animation-delay: calc(var(--scorecard-i, 0) * var(--scorecard-beat));
+}
+
+/* The second, lighter pass underneath — a line ruled by hand is never single. */
+.scorecard__rule::after {
+  content: "";
+  display: block;
+  height: 1px;
+  margin-top: 3px;
+  background: var(--ink-faint);
+  transform: rotate(-0.4deg);
+}
+
+.scorecard__cell--total {
+  padding-top: 0.15rem;
+  border-bottom: 0;
+}
+
+.scorecard__totalwrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 3rem;
+  min-height: 2.6rem;
+}
+
+.scorecard__total {
+  font-family: var(--font-num);
+  font-variant-numeric: tabular-nums;
+  font-size: 2.1rem;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--ink);
+}
+
+.scorecard__round--total {
+  font-size: 0.85rem;
+  color: var(--ink-faint);
+  border-bottom: 0;
+}
+
+.scorecard__circle {
+  position: absolute;
+  top: -0.3rem;
+  left: -0.1rem;
+  /* Sized explicitly rather than by insets: an inline SVG has no intrinsic
+     width, so `width: auto` would fall back to the 300×150 default size. */
+  width: calc(100% + 0.2rem);
+  height: calc(100% + 0.6rem);
+  overflow: visible;
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  pointer-events: none;
+}
+
+/* The ring is the last thing to land, and it takes its time getting there. */
+.scorecard__circle .scorecard__stroke {
+  animation-duration: 620ms;
+  animation-delay: calc(var(--scorecard-i, 0) * var(--scorecard-beat) + 220ms);
+}
+
+/* ── Dismiss ─────────────────────────────────────────────────────────────── */
+
+.scorecard__done {
+  width: 100%;
+  min-height: var(--tap);
+  margin-top: var(--gap);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 1.05rem;
+  font-weight: 700;
+  cursor: pointer;
+  animation: scorecard-row-in 320ms ease-out backwards;
+  animation-delay: calc(var(--scorecard-i, 0) * var(--scorecard-beat));
+}
+
+.scorecard__done:active {
+  transform: translateY(1px);
+}
+
+.scorecard__sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ── Motion ──────────────────────────────────────────────────────────────── */
+
+@keyframes scorecard-land {
+  from {
+    opacity: 0;
+    transform: rotate(-2.6deg) translateY(16px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: rotate(-0.6deg) translateY(0) scale(1);
+  }
+}
+
+@keyframes scorecard-row-in {
+  from {
+    opacity: 0;
+    transform: translateY(9px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes scorecard-draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes scorecard-rule {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+/*
+ * Reduced motion gets the finished sheet, not a slower one. Only the animated
+ * properties are reset — the sheet's tilt and the marks' wobble are the look,
+ * not the movement, so they stay.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .scorecard__sheet,
+  .scorecard__row,
+  .scorecard__stroke,
+  .scorecard__circle .scorecard__stroke,
+  .scorecard__rule,
+  .scorecard__done {
+    animation: none;
+  }
+
+  .scorecard__row,
+  .scorecard__done {
+    opacity: 1;
+    transform: none;
+  }
+
+  .scorecard__stroke {
+    stroke-dashoffset: 0;
+  }
+
+  .scorecard__rule {
+    transform: scaleX(1);
+  }
+}

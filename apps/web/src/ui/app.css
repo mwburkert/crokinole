@@ -1,0 +1,1395 @@
+/* Layout, components, and screen-specific rules. Phone-first throughout. */
+
+.app {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+.app__main {
+  flex: 1;
+  width: 100%;
+  max-width: 40rem;
+  margin: 0 auto;
+  padding: var(--gap) var(--gap) calc(var(--tap) + 3.5rem);
+}
+
+/* ── Top bar ─────────────────────────────────────────────────────────────── */
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: var(--felt);
+  color: var(--disc-white);
+  padding: calc(env(safe-area-inset-top) + 0.6rem) var(--gap) 0.6rem;
+  box-shadow: var(--shadow-sm);
+}
+
+.topbar__inner {
+  max-width: 40rem;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--gap);
+}
+
+.topbar__title {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.topbar__meta {
+  font-size: 0.85rem;
+  opacity: 0.8;
+}
+
+.topbar__admin {
+  color: var(--disc-white);
+  text-decoration: none;
+  font-size: 1.25rem;
+  line-height: 1;
+  min-width: 2.75rem;
+  min-height: 2.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+/* ── Night pagination ────────────────────────────────────────────────────── */
+
+.daynav {
+  display: grid;
+  grid-template-columns: var(--tap) 1fr var(--tap);
+  align-items: center;
+  gap: var(--gap-sm);
+}
+
+.daynav__btn {
+  min-height: var(--tap);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg-raised);
+  color: var(--ink);
+  font-size: 1.4rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.daynav__btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.daynav__label {
+  text-align: center;
+  font-weight: 700;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
+}
+
+.daynav__sub {
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: var(--ink-faint);
+}
+
+/* Not-here players sit back rather than disappearing, so the list stays stable. */
+.chip[aria-pressed="false"] {
+  opacity: 0.45;
+}
+
+.row--absent td {
+  opacity: 0.4;
+}
+
+.toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 2.5rem;
+  font-size: 0.88rem;
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+
+.toggle input {
+  width: 1.15rem;
+  height: 1.15rem;
+  accent-color: var(--felt);
+}
+
+/*
+ * Names are the thing you actually read on these screens, so they get one size
+ * everywhere and it's as large as the narrowest surface allows. `MAX_NAME_LENGTH`
+ * in core keeps them short enough that this never has to shrink or ellipsise.
+ */
+.table--standings td:first-child,
+.name {
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.table--standings td,
+.table--standings th {
+  padding: 0.6rem 0.35rem;
+}
+
+/* ── Board seating (new game) ────────────────────────────────────────────── */
+
+/*
+ * A board with a seat on each side. The side columns get a hard minimum because
+ * a <select> that truncates its own placeholder is worse than a smaller board —
+ * at 375px there is very little room to go round.
+ */
+.table-layout {
+  display: grid;
+  grid-template-columns: minmax(6rem, 1fr) minmax(0, 8.5rem) minmax(6rem, 1fr);
+  grid-template-rows: auto auto auto;
+  grid-template-areas:
+    ".    top    ."
+    "left board right"
+    ".    bottom .";
+  align-items: center;
+  justify-items: center;
+  gap: var(--gap-xs);
+}
+
+/* Singles keeps the identical grid and simply leaves the side cells empty, so
+   toggling format never resizes the board. */
+
+.seat--top { grid-area: top; }
+.seat--right { grid-area: right; }
+.seat--bottom { grid-area: bottom; }
+.seat--left { grid-area: left; }
+.table-layout__board { grid-area: board; width: 100%; }
+
+.seat {
+  width: 100%;
+  max-width: 9.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.seat__label {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+/*
+ * One size for every seat, side seats included. `MAX_NAME_LENGTH` in core caps
+ * names at 12 characters so this never has to shrink — a name that shrank only
+ * in the left and right chairs would make the table read unevenly.
+ */
+.seat__select {
+  width: 100%;
+  min-height: var(--tap);
+  padding: 0 0.25rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg-raised);
+  color: var(--ink);
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  appearance: none;
+  text-align: center;
+  text-align-last: center;
+}
+
+.seat__select--empty {
+  color: var(--ink-faint);
+  font-weight: 500;
+  border-style: dashed;
+}
+
+/* Side seats keep the same type size; they just get a slightly wider column
+   allowance from .table-layout to make room for it. */
+
+/* Three icon buttons under the board: colours, re-seat, mix up. */
+.tools {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--gap-sm);
+  margin-top: var(--gap-sm);
+}
+
+.tools__btn {
+  min-height: var(--tap);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  padding: 0.3rem 0.2rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--ink);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.tools__btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.tools__btn:active:not(:disabled) {
+  background: var(--felt);
+  color: var(--disc-white);
+}
+
+.tools__glyph {
+  font-size: 1.1rem;
+  line-height: 1.1;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.bet-row {
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  align-items: center;
+  gap: var(--gap-sm);
+}
+
+.bet-row__label {
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.bet-row__input {
+  min-height: var(--tap);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-num);
+  font-size: 1.35rem;
+  font-weight: 700;
+  text-align: center;
+  width: 100%;
+}
+
+/* ── Bottom nav ──────────────────────────────────────────────────────────── */
+
+.tabbar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 20;
+  display: flex;
+  background: var(--bg-raised);
+  border-top: 1px solid var(--line);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.tabbar__link {
+  flex: 1;
+  min-height: var(--tap);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 0.4rem 0;
+  text-decoration: none;
+  color: var(--ink-soft);
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+
+.tabbar__link[aria-current="page"] {
+  color: var(--accent);
+}
+
+.tabbar__glyph {
+  font-size: 1.15rem;
+  line-height: 1;
+}
+
+/* ── Generic bits ────────────────────────────────────────────────────────── */
+
+.card {
+  background: var(--bg-raised);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: var(--gap);
+  box-shadow: var(--shadow-sm);
+}
+
+.card + .card {
+  margin-top: var(--gap);
+}
+
+.card__title {
+  margin: 0 0 var(--gap-sm);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-sm);
+}
+
+.spread {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--gap-sm);
+}
+
+.muted {
+  color: var(--ink-soft);
+}
+
+.faint {
+  color: var(--ink-faint);
+  font-size: 0.85rem;
+}
+
+.num {
+  font-family: var(--font-num);
+  font-variant-numeric: tabular-nums;
+}
+
+.pos {
+  color: var(--positive);
+  font-weight: 700;
+}
+
+.neg {
+  color: var(--negative);
+  font-weight: 700;
+}
+
+.empty {
+  text-align: center;
+  padding: var(--gap-lg) var(--gap);
+  color: var(--ink-soft);
+}
+
+/* ── Buttons ─────────────────────────────────────────────────────────────── */
+
+.btn {
+  min-height: var(--tap);
+  padding: 0 var(--gap-lg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg-raised);
+  color: var(--ink);
+  font-weight: 700;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--gap-sm);
+}
+
+.btn:active {
+  transform: translateY(1px);
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btn--primary {
+  background: var(--felt);
+  border-color: var(--felt-deep);
+  color: var(--disc-white);
+}
+
+.btn--accent {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+
+.btn--ghost {
+  background: transparent;
+}
+
+.btn--block {
+  width: 100%;
+}
+
+.btn--lg {
+  min-height: 3.75rem;
+  font-size: 1.1rem;
+}
+
+/* ── Chips / segmented control ───────────────────────────────────────────── */
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--gap-sm);
+}
+
+.chip {
+  min-height: 2.75rem;
+  padding: 0 var(--gap);
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--ink);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.chip[aria-pressed="true"] {
+  background: var(--felt);
+  border-color: var(--felt);
+  color: var(--disc-white);
+}
+
+.chip--black[aria-pressed="true"] {
+  background: var(--disc-black);
+  border-color: var(--disc-black);
+  color: var(--disc-white);
+}
+
+.chip--white[aria-pressed="true"] {
+  background: var(--disc-white);
+  border-color: var(--walnut);
+  color: var(--disc-black);
+}
+
+.segmented {
+  display: flex;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.segmented__option {
+  flex: 1;
+  min-height: var(--tap);
+  border: 0;
+  background: var(--bg);
+  color: var(--ink-soft);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.segmented__option[aria-pressed="true"] {
+  background: var(--felt);
+  color: var(--disc-white);
+}
+
+/* ── Disc swatch ─────────────────────────────────────────────────────────── */
+
+.disc {
+  width: 1.1rem;
+  height: 1.1rem;
+  border-radius: 50%;
+  flex: none;
+  border: 1px solid var(--walnut);
+  display: inline-block;
+}
+
+.disc--black {
+  background: var(--disc-black);
+}
+
+.disc--white {
+  background: var(--disc-white);
+}
+
+/* ── Entry screen ────────────────────────────────────────────────────────── */
+
+.scoreline {
+  position: sticky;
+  top: 3.1rem;
+  z-index: 10;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: var(--gap-sm);
+  background: var(--bg-sunken);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: var(--gap-sm) var(--gap);
+  margin-bottom: var(--gap);
+}
+
+.scoreline__side {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-sm);
+  min-width: 0;
+}
+
+.scoreline__side--right {
+  justify-content: flex-end;
+}
+
+.scoreline__mp {
+  font-family: var(--font-num);
+  font-size: 1.7rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.scoreline__label {
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  text-align: center;
+}
+
+.boards {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--gap-sm);
+}
+
+.board {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: var(--gap-sm);
+  background: var(--bg-raised);
+}
+
+.board__head {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-xs);
+  justify-content: center;
+  font-weight: 700;
+  font-size: 0.85rem;
+  margin-bottom: var(--gap-sm);
+  min-height: 1.5rem;
+}
+
+.board__total {
+  text-align: center;
+  font-family: var(--font-num);
+  font-size: 2rem;
+  font-weight: 800;
+  line-height: 1.1;
+  margin-top: var(--gap-sm);
+  padding-top: var(--gap-sm);
+  border-top: 1px dashed var(--line);
+}
+
+.stepper {
+  display: grid;
+  grid-template-columns: var(--tap) 1fr var(--tap);
+  align-items: center;
+  gap: var(--gap-xs);
+  margin-bottom: var(--gap-xs);
+}
+
+.stepper__btn {
+  min-height: var(--tap);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg);
+  font-size: 1.3rem;
+  font-weight: 800;
+  cursor: pointer;
+  color: var(--ink);
+}
+
+.stepper__btn:active {
+  background: var(--felt);
+  color: var(--disc-white);
+}
+
+.stepper__value {
+  text-align: center;
+  font-family: var(--font-num);
+  font-weight: 700;
+}
+
+.stepper__ring {
+  display: block;
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+  color: var(--ink-faint);
+  text-transform: uppercase;
+}
+
+.stepper__count {
+  display: block;
+  font-size: 1.3rem;
+  line-height: 1.1;
+}
+
+.differential {
+  text-align: center;
+  padding: var(--gap-sm) 0 var(--gap-xs);
+}
+
+.differential__value {
+  font-family: var(--font-num);
+  font-size: 2.4rem;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+
+.differential__who {
+  font-size: 0.9rem;
+  color: var(--ink-soft);
+  font-weight: 600;
+}
+
+.issue {
+  border-radius: var(--radius);
+  padding: var(--gap-sm) var(--gap);
+  font-size: 0.9rem;
+  margin-bottom: var(--gap-sm);
+}
+
+.issue--error {
+  background: color-mix(in srgb, var(--negative) 16%, transparent);
+  border: 1px solid var(--negative);
+}
+
+.issue--warning {
+  background: color-mix(in srgb, var(--walnut-soft) 18%, transparent);
+  border: 1px solid var(--walnut-soft);
+}
+
+/* ── Tables ──────────────────────────────────────────────────────────────── */
+
+.table-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.92rem;
+}
+
+.table th,
+.table td {
+  padding: 0.55rem 0.4rem;
+  text-align: right;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+
+.table th:first-child,
+.table td:first-child {
+  text-align: left;
+  position: sticky;
+  left: 0;
+  background: var(--bg-raised);
+}
+
+/*
+ * Two frozen columns rather than one: the name tells you who, and Net is the
+ * number every other column is being compared against. Losing it off the left
+ * edge makes the rest of the table meaningless.
+ */
+.table--frozen .col-name {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: var(--bg-raised);
+  text-align: left;
+  min-width: 5.5rem;
+}
+
+.table--frozen .col-net {
+  position: sticky;
+  left: 5.5rem;
+  z-index: 2;
+  background: var(--bg-raised);
+  text-align: right;
+  box-shadow: 1px 0 0 var(--line);
+}
+
+.table--frozen thead .col-name,
+.table--frozen thead .col-net {
+  z-index: 3;
+}
+
+.table th {
+  font-size: 0.7rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  cursor: pointer;
+}
+
+.table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+/* ── History list ────────────────────────────────────────────────────────── */
+
+.night {
+  margin-bottom: var(--gap-lg);
+}
+
+.night__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: var(--gap-sm);
+}
+
+.night__date {
+  font-weight: 700;
+}
+
+.game-row {
+  display: block;
+  width: 100%;
+  text-align: left;
+  text-decoration: none;
+  color: inherit;
+  background: var(--bg-raised);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: var(--gap-sm) var(--gap);
+  margin-bottom: var(--gap-sm);
+}
+
+.game-row__score {
+  font-family: var(--font-num);
+  font-weight: 800;
+  font-size: 1.1rem;
+}
+
+/* ── History matchup ─────────────────────────────────────────────────────── */
+
+.matchup {
+  background: var(--bg-raised);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  margin-bottom: var(--gap-sm);
+  overflow: hidden;
+}
+
+.matchup__main {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: var(--gap-sm);
+  width: 100%;
+  padding: var(--gap-sm) var(--gap);
+  background: none;
+  border: 0;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.matchup__side {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 0 0.4rem;
+  min-width: 0;
+}
+
+/* Both sides read the same way — name, then money to its right. Mirroring the
+   right-hand pair put the money first and made the two halves scan differently. */
+
+.matchup__player {
+  display: contents;
+}
+
+.matchup__name {
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.matchup__money {
+  font-family: var(--font-num);
+  font-size: 0.75rem;
+  font-weight: 700;
+  white-space: nowrap;
+  text-align: right;
+}
+
+.matchup__score {
+  font-family: var(--font-num);
+  font-size: 1.5rem;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0 0.15rem;
+}
+
+.matchup__dash {
+  color: var(--ink-faint);
+  padding: 0 1px;
+}
+
+.score--win { color: var(--positive); }
+.score--loss { color: var(--negative); }
+.score--tie { color: var(--ink); }
+
+/* Was --bg-sunken, which reads as a near-black hole in dark mode. A hairline
+   and a faint tint separate it enough without punching through the card. */
+.matchup__detail {
+  padding: var(--gap-sm) var(--gap) var(--gap);
+  border-top: 1px dashed var(--line);
+  background: color-mix(in srgb, var(--ink) 4%, transparent);
+  font-size: 0.9rem;
+}
+
+.badge {
+  display: inline-block;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  background: var(--bg-sunken);
+  color: var(--ink-soft);
+  border: 1px solid var(--line);
+}
+
+.badge--live {
+  background: var(--accent);
+  color: var(--accent-ink);
+  border-color: var(--accent);
+}
+
+/* ── Banner ──────────────────────────────────────────────────────────────── */
+
+.banner {
+  background: color-mix(in srgb, var(--walnut-soft) 20%, transparent);
+  border: 1px solid var(--walnut-soft);
+  border-radius: var(--radius);
+  padding: var(--gap-sm) var(--gap);
+  font-size: 0.88rem;
+  margin-bottom: var(--gap);
+}
+
+@media (min-width: 30rem) {
+  .differential__value {
+    font-size: 3rem;
+  }
+}
+
+/* ── Admin rows and menus ────────────────────────────────────────────────── */
+
+.iconbtn {
+  min-width: var(--tap);
+  min-height: var(--tap);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg-raised);
+  color: var(--ink);
+  font-size: 1.4rem;
+  font-weight: 800;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.iconbtn--sm {
+  min-width: 2.25rem;
+  min-height: 2.25rem;
+  font-size: 1.1rem;
+  border-radius: 999px;
+}
+
+.prow + .prow {
+  border-top: 1px solid var(--line);
+}
+
+.prow__main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--gap-sm);
+  padding: 0.55rem 0;
+}
+
+.prow__id {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.prow__id .name,
+.prow__id .faint {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.prow__menu {
+  padding: 0 0 0.6rem;
+}
+
+.menu {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.menu__item {
+  min-height: 2.75rem;
+  padding: 0 var(--gap);
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--ink);
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.menu__item:last-child { border-bottom: 0; }
+.menu__item:disabled { opacity: 0.4; cursor: not-allowed; }
+.menu__item--danger { color: var(--negative); }
+
+.field {
+  width: 100%;
+  min-height: var(--tap);
+  padding: 0 var(--gap-sm);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--ink);
+  font-size: 1rem;
+}
+
+/* ── Card head with an action ────────────────────────────────────────────── */
+
+.card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--gap-sm);
+  margin-bottom: var(--gap-sm);
+}
+
+.card__head .card__title {
+  margin: 0;
+}
+
+.infobtn {
+  border: 0;
+  background: none;
+  color: var(--ink-faint);
+  font-size: 1.15rem;
+  line-height: 1;
+  min-width: 2.25rem;
+  min-height: 2.25rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.infobtn[aria-expanded="true"] {
+  color: var(--accent);
+}
+
+.legend {
+  margin: 0 0 var(--gap);
+  padding: var(--gap-sm) var(--gap);
+  background: var(--bg-sunken);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  font-size: 0.85rem;
+}
+
+.legend__row {
+  display: grid;
+  grid-template-columns: 5.5rem 1fr;
+  gap: 0.35rem;
+  padding: 0.15rem 0;
+}
+
+.legend dt {
+  font-weight: 700;
+  font-family: var(--font-num);
+}
+
+.legend dd {
+  margin: 0;
+  color: var(--ink-soft);
+}
+
+.legend__note {
+  margin: var(--gap-sm) 0 0;
+}
+
+/* ── Board scorer ────────────────────────────────────────────────────────── */
+
+.scorer {
+  position: relative;
+}
+
+/* Capped so the whole round-entry screen clears an iPhone 15 without scrolling —
+   at full width the board alone ate 470px of an 852px viewport. */
+.scorer__svg {
+  width: 100%;
+  max-width: 21.5rem;
+  margin: 0 auto;
+  display: block;
+  touch-action: none; /* the board owns the gesture; the page must not scroll under it */
+  user-select: none;
+}
+
+.scorer__ring {
+  transition: filter 140ms ease;
+}
+
+/* The target region reacts as a disc enters its hitbox. */
+.scorer__ring.is-hover {
+  filter: brightness(1.12) saturate(1.15);
+  stroke: var(--accent);
+  stroke-width: 2;
+}
+
+.scorer__disc {
+  stroke: var(--walnut);
+  stroke-width: 0.8;
+  transition: r 130ms ease, opacity 130ms ease;
+}
+
+.scorer__disc--black { fill: var(--disc-black); }
+.scorer__disc--white { fill: var(--disc-white); }
+
+.scorer__disc.is-dragging,
+.scorer__disc.is-ghost {
+  stroke: var(--accent);
+  stroke-width: 1.4;
+}
+
+.scorer__disc.is-ghost {
+  pointer-events: none;
+}
+
+.scorer__count,
+.scorer__stashcount {
+  font-family: var(--font-num);
+  font-size: 9px;
+  font-weight: 800;
+  fill: var(--ink-soft);
+  text-anchor: middle;
+}
+
+.scorer__stashcount {
+  text-anchor: start;
+}
+
+.scorer__pile,
+.scorer__stash {
+  cursor: grab;
+}
+
+.scorer__flash {
+  font-family: var(--font-num);
+  font-size: 15px;
+  font-weight: 800;
+  fill: var(--accent);
+  text-anchor: middle;
+  pointer-events: none;
+  animation: flash-up 700ms ease-out forwards;
+}
+
+@keyframes flash-up {
+  from { opacity: 1; transform: translateY(0); }
+  to { opacity: 0; transform: translateY(-16px); }
+}
+
+.scorer__toggle {
+  display: flex;
+  justify-content: center;
+  gap: var(--gap-sm);
+  margin-top: var(--gap-sm);
+}
+
+.swatch {
+  width: 3.25rem;
+  height: 2.5rem;
+  border-radius: var(--radius);
+  border: 2px solid var(--line);
+  cursor: pointer;
+}
+
+.swatch--black { background: var(--disc-black); }
+.swatch--white { background: var(--disc-white); }
+
+.swatch[aria-pressed="true"] {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+/* The score card's ownership underline — fixed, not proportional. */
+.scoreline__side {
+  padding-bottom: 4px;
+  border-bottom: 4px solid transparent;
+}
+
+.scoreline__side--black { border-bottom-color: var(--disc-black); }
+.scoreline__side--white { border-bottom-color: var(--disc-white); }
+
+/* ── Manual scoring menu ─────────────────────────────────────────────────── */
+
+.manual__cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--gap-sm);
+}
+
+.manual__col {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: var(--gap-sm);
+}
+
+.manual__head {
+  text-align: center;
+  font-weight: 700;
+  font-size: 0.8rem;
+  margin-bottom: 0.35rem;
+}
+
+.manual__row {
+  display: grid;
+  grid-template-columns: 1.1rem 1.6rem 1fr 1.6rem;
+  align-items: center;
+  gap: 0.15rem;
+  margin-bottom: 0.25rem;
+}
+
+.manual__ring {
+  font-size: 0.7rem;
+  color: var(--ink-faint);
+  font-family: var(--font-num);
+}
+
+.manual__step {
+  min-height: 1.9rem;
+  border: 1px solid var(--line);
+  border-radius: 0.4rem;
+  background: var(--bg);
+  color: var(--ink);
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.manual__field {
+  min-height: 1.9rem;
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 0.4rem;
+  background: var(--bg);
+  color: var(--ink);
+  text-align: center;
+  font-weight: 700;
+}
+
+.manual__total {
+  text-align: center;
+  font-size: 1.2rem;
+  font-weight: 800;
+  border-top: 1px dashed var(--line);
+  margin-top: 0.35rem;
+  padding-top: 0.25rem;
+}
+
+.manual__totals {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--gap-sm);
+}
+
+/* The pile is also the colour toggle: tap selects, hold-and-drag takes a disc. */
+.scorer__pilering {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 2;
+  transition: stroke 140ms ease;
+}
+
+.scorer__pile.is-selected .scorer__pilering {
+  stroke: var(--accent);
+}
+
+/* ── Round entry: score header, overlay, flashes ─────────────────────────── */
+
+/* No scrollbar anywhere — this is a phone app pretending to be native. */
+html { scrollbar-width: none; }
+::-webkit-scrollbar { width: 0; height: 0; display: none; }
+
+.scorebtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 2px auto 0;
+  border: 0;
+  background: none;
+  color: var(--ink-faint);
+  cursor: pointer;
+  min-height: 1.75rem;
+  padding: 0;
+}
+
+.scorebtn[aria-expanded="true"] { color: var(--accent); }
+
+.matchscore {
+  text-align: center;
+  margin: 0.35rem 0 0;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--ink-faint);
+  letter-spacing: 0.03em;
+}
+
+.matchscore__dash { padding: 0 2px; }
+.matchscore__to { font-weight: 500; }
+
+/* The scoreboard floats over the board so nothing beneath it moves. */
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--gap);
+  background: rgb(0 0 0 / 0.45);
+}
+
+.overlay__sheet {
+  width: 100%;
+  max-width: 24rem;
+  max-height: 85vh;
+  overflow-y: auto;
+  background: var(--bg-raised);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: var(--gap);
+  box-shadow: var(--shadow);
+}
+
+/* Flash colours: points green, gutter red, a twenty is the event of the round. */
+.scorer__flash--points { fill: var(--positive); }
+.scorer__flash--gutter { fill: var(--negative); }
+
+.scorer__flash--twenty {
+  font-size: 34px;
+  animation: twenty-pop 1600ms ease-out forwards, rainbow 900ms linear infinite;
+}
+
+@keyframes twenty-pop {
+  0% { opacity: 0; transform: scale(0.6); }
+  18% { opacity: 1; transform: scale(1.25); }
+  70% { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(1.05) translateY(-10px); }
+}
+
+@keyframes rainbow {
+  0% { fill: #e0473a; }
+  25% { fill: #e0a13a; }
+  50% { fill: #3ba85e; }
+  75% { fill: #3a76e0; }
+  100% { fill: #e0473a; }
+}
+
+.scorer__stashslot {
+  fill: color-mix(in srgb, var(--ink) 7%, transparent);
+}
+
+/* The gutter has to be unmistakable — it's the one drop that scores nothing. */
+.scorer__ring.is-hover { filter: brightness(1.15) saturate(1.2); }
+
+/* The centre hole opens up while a disc is held over it, then pulses. */
+.scorer__hole {
+  transition: none; /* driven per-frame, not by CSS */
+}
+
+.scorer__hole.is-open {
+  animation: hole-pulse 620ms ease-in-out infinite;
+  transform-origin: center;
+}
+
+@keyframes hole-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.62; }
+}
+
+/* An abandoned game stays visible and resumable rather than looking finished. */
+.matchup--unfinished {
+  border-style: dashed;
+  border-color: var(--accent);
+}
+
+.matchup--unfinished .matchup__score {
+  opacity: 0.65;
+}
+
+/* Match score and target flank the score cards on one line above them. */
+.scorecontext {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--gap-sm);
+  padding: 0 0.15rem 0.3rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: var(--ink-faint);
+}
+
+.matchscore__dash { padding: 0 2px; }
+
+/* The controls under Finish round are secondary — they don't need full height. */
+.row--tools .btn {
+  min-height: 2.4rem;
+  padding: 0 var(--gap);
+  flex: 1;
+}

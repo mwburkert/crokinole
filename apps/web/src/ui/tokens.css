@@ -1,0 +1,122 @@
+/*
+ * Design tokens — board-game themed.
+ *
+ * The palette is taken from an actual crokinole board: a light maple playing
+ * surface, walnut-stained rings, a deep red twenty hole, and felt green for the
+ * surround. Discs are literally black and white, which is convenient — the two
+ * sides of every screen can use the real colours rather than an invented pair.
+ *
+ * Phone-first: everything is sized for one-handed use standing next to a board.
+ * Tap targets never go below 44px, and the numbers that matter are the largest
+ * things on screen (§3.5).
+ */
+
+:root {
+  color-scheme: light dark;
+
+  /* Board */
+  --maple: #f2e2c2;
+  --maple-deep: #e4cda1;
+  --walnut: #6b4423;
+  --walnut-soft: #8a5f3c;
+  --felt: #1e4032;
+  --felt-deep: #16301f;
+  --twenty: #a8321f;
+  --twenty-bright: #c94a34;
+
+  /* Discs */
+  --disc-black: #171310;
+  --disc-white: #faf3e4;
+
+  /* Semantic — light */
+  --bg: var(--maple);
+  --bg-raised: #fbf1dc;
+  --bg-sunken: var(--maple-deep);
+  --ink: #241a12;
+  --ink-soft: #6d5b48;
+  --ink-faint: #9c8973;
+  --line: #d8c096;
+  --accent: var(--twenty);
+  --accent-ink: #fff6ec;
+  --positive: #1f6b45;
+  --negative: var(--twenty);
+  --focus: #2f6f8f;
+
+  /* Type */
+  --font: ui-rounded, "SF Pro Rounded", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --font-num: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, monospace;
+
+  /* Space */
+  --gap-xs: 0.25rem;
+  --gap-sm: 0.5rem;
+  --gap: 0.875rem;
+  --gap-lg: 1.5rem;
+  --radius: 0.75rem;
+  --radius-lg: 1.25rem;
+  --tap: 3rem;
+
+  --shadow: 0 1px 2px rgb(36 26 18 / 0.14), 0 6px 18px rgb(36 26 18 / 0.09);
+  --shadow-sm: 0 1px 2px rgb(36 26 18 / 0.16);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #17130f;
+    --bg-raised: #221c16;
+    --bg-sunken: #100d0a;
+    --ink: #f3e7d3;
+    --ink-soft: #b9a68c;
+    --ink-faint: #7d6c58;
+    --line: #3a2f24;
+    --accent: var(--twenty-bright);
+    --accent-ink: #1a0f0c;
+    --positive: #4bbd85;
+    --negative: #e8705a;
+    --focus: #6fb6d8;
+
+    --shadow: 0 1px 2px rgb(0 0 0 / 0.5), 0 6px 18px rgb(0 0 0 / 0.4);
+    --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.5);
+  }
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font);
+  font-size: 16px;
+  line-height: 1.45;
+  /* Room for the sticky bottom nav plus the iPhone home indicator. */
+  padding-bottom: env(safe-area-inset-bottom);
+  overscroll-behavior-y: contain;
+}
+
+button,
+input,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+/* Nobody wants a text selection popup while tapping steppers 40 times. */
+button {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
