@@ -93,3 +93,20 @@
 .join__done-note {
   margin: 0 0 var(--gap);
 }
+
+/*
+ * "There's already a Kinsey here." Shown when the email is new but the name
+ * isn't — see the comment on `nameClash` in JoinSheet.tsx. Styled as a caution
+ * rather than an error because nothing has gone wrong yet; the whole point is
+ * that it appears *before* the write.
+ */
+.join__warn {
+  margin: 0;
+  padding: var(--gap-sm) var(--gap);
+  border-radius: var(--radius);
+  background: var(--bg-sunken);
+  border: 1px solid var(--line);
+  color: var(--ink);
+  font-size: 0.85rem;
+  line-height: 1.4;
+}

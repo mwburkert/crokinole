@@ -317,6 +317,37 @@ function JoinForm({ onClose }: { onClose: () => void }): ReactNode {
   /** True once the lookup has answered for exactly the address on screen. */
   const settled = emailValid && lookupEmail === trimmedEmail && found !== undefined;
 
+  /**
+   * Someone of this name is already here, but not under this address.
+   *
+   * ⚠️ The duplicate protection in this form keys on **email**, and every
+   * player carried over from before tonight has none — they were added by an
+   * admin, which is exactly the case §3.6 exists for. So the first time a
+   * regular joins with their own address, nothing matches and they become a
+   * *second* row: a fresh Kinsey with no games beside the Kinsey who owns the
+   * 5 August night. That is precisely the fork this flow was built to prevent,
+   * and it is most likely to happen on the very first night it is used.
+   *
+   * Matching on name and stopping is not the answer either — two people can
+   * genuinely share a first name, and silently adopting the wrong row would
+   * hand someone else's money to a stranger. So this warns and leaves the
+   * decision with a human, which is the only safe move when the match is a
+   * guess.
+   */
+  const canon = (value: string): string => value.trim().toLowerCase();
+  const nameClash = useMemo(() => {
+    if (!settled || found) return null;
+    const first = canon(firstName);
+    if (first === "") return null;
+    return (
+      players.find(
+        (player) =>
+          canon(player.firstName) === first &&
+          (lastName.trim() === "" || canon(player.lastName ?? "") === canon(lastName)),
+      ) ?? null
+    );
+  }, [settled, found, firstName, lastName, players]);
+
   const reset = useCallback((): void => {
     setEmail("");
     setFirstName("");
@@ -423,6 +454,14 @@ function JoinForm({ onClose }: { onClose: () => void }): ReactNode {
           {found ? (
             <p className="faint join__hint" role="status">
               Welcome back — filled in from last time. Change anything that's wrong.
+            </p>
+          ) : null}
+
+          {nameClash ? (
+            <p className="join__warn" role="alert">
+              <strong>{nameClash.displayName}</strong> is already here, with no email on
+              file. If that's you, stop — ask an admin to put this address on that name
+              instead. Carrying on makes a second you, and your games won't follow.
             </p>
           ) : null}
 
