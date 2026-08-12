@@ -376,8 +376,17 @@ export function BoardScorer({
     if (region === "twenty") launchTwenty(drag.color);
   };
 
-  const twentiesOf = (color: DiscColor): number =>
-    discs.filter((disc) => disc.color === color && disc.region === "twenty").length;
+  /**
+   * Twenties showing in a team's row.
+   *
+   * A disc in flight is deliberately not counted yet — otherwise it pops into
+   * the row the instant it's sunk and then the animation delivers a disc that's
+   * already there, so you briefly see it twice. It joins the row when it lands.
+   */
+  const twentiesOf = (color: DiscColor): number => {
+    const total = discs.filter((disc) => disc.color === color && disc.region === "twenty").length;
+    return Math.max(0, total - (sinking?.color === color ? 1 : 0));
+  };
 
   return (
     <div className="scorer">
