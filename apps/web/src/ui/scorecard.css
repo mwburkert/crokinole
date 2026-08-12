@@ -379,23 +379,30 @@
   --scorecard-hold: 900ms;
 }
 
-/* Settled rounds: present immediately, no stagger. */
-.scorecard__row {
-  animation-delay: 0ms;
-}
-
+/*
+ * Settled rounds don't animate at all — not even at zero delay.
+ *
+ * Zeroing the delay still ran the draw, so every previous check and X redrew
+ * itself alongside the new one. They're history; they should simply be on the
+ * sheet when it lands. Only the round just played performs.
+ *
+ * Safe because every one of these animations ends at the element's own base
+ * style, so removing the animation leaves the finished state.
+ */
+.scorecard__row,
 .scorecard__row .scorecard__mark,
 .scorecard__row .scorecard__points {
-  animation-delay: 0ms;
+  animation: none;
 }
 
-/* The new round's label arrives with the rest; its marks wait. */
+/* The new round's label arrives with the rest; only its marks and points wait. */
 .scorecard__row[data-latest="true"] .scorecard__mark {
-  animation-duration: 420ms;
+  animation: scorecard-draw 420ms ease-out backwards;
   animation-delay: var(--scorecard-hold);
 }
 
 .scorecard__row[data-latest="true"] .scorecard__points {
+  animation: scorecard-row-in 300ms ease-out backwards;
   animation-delay: calc(var(--scorecard-hold) + 420ms);
 }
 
