@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Crokinole — phone preview</title>
+    <!--
+      Dev-only harness. Chrome on Windows refuses to make a window narrower than
+      about 500px, so resizing the browser can't show you the real phone layout.
+      This frames the app at true device sizes instead.
+
+      Served at http://localhost:5173/preview.html — it is not part of the app
+      and nothing imports it.
+    -->
+    <style>
+      :root {
+        color-scheme: light dark;
+        --chrome: #2a231c;
+        --page: #6b6257;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 1rem;
+        padding: 1.25rem;
+        background: var(--page);
+        font: 14px ui-rounded, "Segoe UI", system-ui, sans-serif;
+        color: #f3e7d3;
+      }
+      .bar {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+        justify-content: center;
+      }
+      button {
+        font: inherit;
+        font-weight: 600;
+        padding: 0.45rem 0.85rem;
+        border-radius: 999px;
+        border: 1px solid #8a7f70;
+        background: #3a332b;
+        color: inherit;
+        cursor: pointer;
+      }
+      button[aria-pressed="true"] {
+        background: #f3e7d3;
+        color: #2a231c;
+        border-color: #f3e7d3;
+      }
+      .phone {
+        border: 12px solid var(--chrome);
+        border-radius: 2.5rem;
+        overflow: hidden;
+        box-shadow: 0 18px 50px rgb(0 0 0 / 0.45);
+        background: #000;
+        flex: none;
+      }
+      iframe { display: block; border: 0; background: #fff; }
+      .meta { opacity: 0.75; font-variant-numeric: tabular-nums; }
+    </style>
+  </head>
+  <body>
+    <div class="bar" id="bar"></div>
+    <div class="meta" id="meta"></div>
+    <div class="phone" id="phone">
+      <iframe id="frame" src="/" title="Crokinole app"></iframe>
+    </div>
+
+    <script>
+      const DEVICES = [
+        { name: "iPhone SE", w: 375, h: 667 },
+        { name: "iPhone 15", w: 393, h: 852 },
+        { name: "iPhone 15 Pro Max", w: 430, h: 932 },
+        { name: "Pixel 8", w: 412, h: 915 },
+      ];
+
+      const bar = document.getElementById("bar");
+      const frame = document.getElementById("frame");
+      const meta = document.getElementById("meta");
+      let active = 1;
+
+      function apply() {
+        const d = DEVICES[active];
+        frame.style.width = d.w + "px";
+        frame.style.height = d.h + "px";
+        meta.textContent = `${d.name} — ${d.w} x ${d.h} CSS px`;
+        [...bar.children].forEach((b, i) =>
+          b.setAttribute("aria-pressed", String(i === active)),
+        );
+      }
+
+      DEVICES.forEach((d, i) => {
+        const b = document.createElement("button");
+        b.textContent = d.name;
+        b.onclick = () => {
+          active = i;
+          apply();
+        };
+        bar.appendChild(b);
+      });
+
+      const reload = document.createElement("button");
+      reload.textContent = "↻ Reload";
+      reload.onclick = () => {
+        frame.src = frame.src;
+      };
+      bar.appendChild(reload);
+
+      apply();
+    </script>
+  </body>
+</html>

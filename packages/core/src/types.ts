@@ -58,6 +58,19 @@ export interface ScoringConfig {
   matchPointsTie: number;
   /** Match points needed to win the game. */
   targetMatchPoints: number;
+  /**
+   * How far ahead the leader must be to take the game.
+   *
+   * `1` ends it the moment someone reaches the target with any lead. `2` is
+   * win-by-two: 5–4 keeps playing, 6–4 ends it. A game can never end level
+   * regardless, since money is riding on it.
+   *
+   * Not an NCA rule — NCA regular play is a fixed four rounds per game rather
+   * than a race to a target, so both the target and the margin are house rules.
+   * Snapshotted per game like everything else in this config, so changing it
+   * never re-decides a game already played.
+   */
+  winBy: number;
   /** 6 for doubles, 8 for singles. `discsPerTeam` is derived, never stored. */
   discsPerPlayer: number;
 }

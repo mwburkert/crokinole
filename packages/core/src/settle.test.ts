@@ -81,16 +81,26 @@ describe("settle — the confirmed rule (Q3)", () => {
     expect(result.every((entry) => entry.netCents === 0)).toBe(true);
   });
 
-  it("still hands the pot to winners who staked nothing", () => {
-    // Faithful to the rule as written: everyone pays in, the winning side takes
-    // the pot. If the winners ante'd $0 they still collect what the losers put
-    // in, split evenly since there are no stakes to weight by. A $0 bet is legal
-    // but unusual — `validateGame` warns separately about a missing bet.
+  it("pays nothing to a winning side that staked nothing", () => {
+    // You cannot collect from a pot you didn't pay into. Nobody on the winning
+    // side ante'd, so the losers keep their money rather than handing it to a
+    // side with no stake in the game.
     const game = buildGame({ betCents: [0, 0, 500, 500], rounds: shortestGame() });
     const result = settle(game);
-    expect(netFor(result, "p1")).toBe(500);
-    expect(netFor(result, "p2")).toBe(500);
+    expect(result.every((entry) => entry.netCents === 0)).toBe(true);
+    expect(sum(result)).toBe(0);
+  });
+
+  it("gives a zero-stake winner nothing while their partner still collects", () => {
+    // p1 staked $10, p2 staked $0, both losers $5. Pot = $20, and p1's
+    // proportional share is the whole of it: +$10. p2 put in nothing and takes
+    // out nothing.
+    const game = buildGame({ betCents: [1000, 0, 500, 500], rounds: shortestGame() });
+    const result = settle(game);
+    expect(netFor(result, "p1")).toBe(1000);
+    expect(netFor(result, "p2")).toBe(0);
     expect(netFor(result, "p3")).toBe(-500);
+    expect(netFor(result, "p4")).toBe(-500);
     expect(sum(result)).toBe(0);
   });
 

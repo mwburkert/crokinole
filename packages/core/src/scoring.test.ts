@@ -24,6 +24,7 @@ describe("config", () => {
     expect(DEFAULT_SCORING.matchPointsWin).toBe(2);
     expect(DEFAULT_SCORING.matchPointsTie).toBe(1);
     expect(DEFAULT_SCORING.targetMatchPoints).toBe(5);
+    expect(DEFAULT_SCORING.winBy).toBe(2);
   });
 
   it("derives disc counts rather than hardcoding 12", () => {
@@ -137,6 +138,44 @@ describe("gameStanding", () => {
     expect(standing.roundPointsFor).toEqual({ A: 30, B: 40 });
   });
 
+  it("defaults to win-by-two: 5–4 keeps playing", () => {
+    // A: 2,2,0,1 = 5.  B: 0,0,2,1 = 3... push B to 4 with a further tie.
+    const rounds = [
+      roundOfFives(2, 1), // A +2
+      roundOfFives(2, 1), // A +2  -> 4-0
+      roundOfFives(1, 2), // B +2  -> 4-2
+      roundOfFives(1, 1), // tie   -> 5-3  (margin 2, complete)
+    ].map((r, index) => ({ ...r, index }));
+    expect(gameStanding(rounds, doubles).matchPoints).toEqual({ A: 5, B: 3 });
+    expect(gameStanding(rounds, doubles).isComplete).toBe(true);
+
+    // Now the 5-4 case: reaching the target with only a one-point lead is not
+    // enough under the default margin.
+    const close = [
+      roundOfFives(2, 1), // A +2 -> 2-0
+      roundOfFives(1, 2), // B +2 -> 2-2
+      roundOfFives(1, 1), // tie  -> 3-3
+      roundOfFives(1, 1), // tie  -> 4-4
+      roundOfFives(1, 1), // tie  -> 5-5
+    ].map((r, index) => ({ ...r, index }));
+    const standing = gameStanding(close, doubles);
+    expect(standing.matchPoints).toEqual({ A: 5, B: 5 });
+    expect(standing.isComplete).toBe(false);
+  });
+
+  it("honours winBy: 1 for a first-past-the-post house rule", () => {
+    const firstPast = { ...doubles, winBy: 1 };
+    const rounds = [
+      roundOfFives(2, 1),
+      roundOfFives(1, 2),
+      roundOfFives(1, 1),
+      roundOfFives(1, 1),
+      roundOfFives(2, 1), // A -> 6-4
+    ].map((r, index) => ({ ...r, index }));
+    expect(gameStanding(rounds, firstPast).isComplete).toBe(true);
+    expect(gameStanding(rounds, { ...doubles, winBy: 3 }).isComplete).toBe(false);
+  });
+
   it("does NOT end a game level at the target — play continues", () => {
     // Five straight ties: 5-5. Both have reached the target, neither leads.
     // A game cannot end level when money is riding on it.
@@ -229,7 +268,9 @@ describe("properties", () => {
           if (!winner) break;
           const loser = otherTeam(winner);
           expect(standing.matchPoints[winner]).toBeGreaterThanOrEqual(doubles.targetMatchPoints);
-          expect(standing.matchPoints[winner]).toBeGreaterThan(standing.matchPoints[loser]);
+          expect(
+            standing.matchPoints[winner] - standing.matchPoints[loser],
+          ).toBeGreaterThanOrEqual(doubles.winBy);
           break;
         }
       }

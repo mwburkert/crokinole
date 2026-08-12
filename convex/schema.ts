@@ -80,6 +80,12 @@ export default defineSchema({
       matchPointsWin: v.number(),
       matchPointsTie: v.number(),
       targetMatchPoints: v.number(),
+      /**
+       * How far ahead the leader must be to take the game. 2 = win-by-two.
+       * Optional so a game snapshotted before this existed still validates;
+       * `toCoreGame` fills the default on read.
+       */
+      winBy: v.optional(v.number()),
       /** 6 doubles / 8 singles. `discsPerTeam` is derived, never stored. */
       discsPerPlayer: v.number(),
     }),

@@ -7,7 +7,7 @@
  * settlements, stats — is derived by core from these shapes.
  */
 
-import type { GameWithRounds, Round } from "@crokinole/core";
+import { DEFAULT_SCORING, type GameWithRounds, type Round } from "@crokinole/core";
 
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
@@ -29,7 +29,9 @@ export function toCoreGame(game: Doc<"games">, rounds: Doc<"rounds">[]): GameWit
     id: game._id,
     playedAt: game.playedAt,
     status: game.status,
-    config: game.config,
+    // `winBy` is optional in the stored schema so older snapshots still
+    // validate; core needs a concrete value.
+    config: { ...game.config, winBy: game.config.winBy ?? DEFAULT_SCORING.winBy },
     teams: game.teams,
     bets: game.bets,
     ...(game.notes !== undefined ? { notes: game.notes } : {}),

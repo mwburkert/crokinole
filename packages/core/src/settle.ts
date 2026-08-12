@@ -27,18 +27,19 @@ export function potCents(bets: Bet[]): number {
  * total drift a cent off the pot, which over a season turns into "the ledger
  * doesn't balance" — the exact class of bug §3.2.1 exists to prevent.
  *
- * When every stake is zero the pot is split as evenly as possible instead, so
- * a $0-stakes game can't produce a divide-by-zero.
+ * **A zero stake earns a zero share.** You cannot collect from a pot you didn't
+ * pay into. When no winner staked anything there is nothing to distribute at
+ * all — the caller handles that case, since paying out here would take money
+ * off the losers with nobody entitled to it.
  */
 function proportionalSplit(pot: number, stakes: number[]): number[] {
   const count = stakes.length;
   if (count === 0) return [];
 
-  const total = stakes.reduce((sum, stake) => sum + stake, 0);
-  const weights = total > 0 ? stakes : stakes.map(() => 1);
-  const weightTotal = total > 0 ? total : count;
+  const weightTotal = stakes.reduce((sum, stake) => sum + stake, 0);
+  if (weightTotal <= 0) return stakes.map(() => 0);
 
-  const exact = weights.map((weight) => (pot * weight) / weightTotal);
+  const exact = stakes.map((weight) => (pot * weight) / weightTotal);
   const shares = exact.map(Math.floor);
   let remainder = pot - shares.reduce((sum, share) => sum + share, 0);
 
@@ -82,9 +83,12 @@ export function settle(game: GameWithRounds): Settlement[] {
     else losers.push(bet);
   }
 
-  // Nobody on the winning side wagered anything — there is nothing to pay out
-  // against, so everyone simply keeps their money.
-  if (winners.length === 0) {
+  // Nobody on the winning side put anything in, so nobody is entitled to take
+  // anything out — everyone keeps their money rather than the losers paying a
+  // side that never ante'd. Covers both "no winner placed a bet at all" and
+  // "every winner bet $0".
+  const winnerStake = winners.reduce((sum, bet) => sum + bet.amountCents, 0);
+  if (winners.length === 0 || winnerStake <= 0) {
     return game.bets.map((bet) => ({ playerId: bet.playerId, netCents: 0 }));
   }
 

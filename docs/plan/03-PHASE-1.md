@@ -214,6 +214,7 @@ export const DEFAULT_SCORING: ScoringConfig = {
   matchPointsWin: 2,
   matchPointsTie: 1,
   targetMatchPoints: 5,
+  winBy: 2,                   // added 2026-08-12 — see below
   discsPerPlayer: 6,          // 8 when format === "singles"
 };
 
@@ -249,7 +250,26 @@ export function aggregateStats(games: Game[], rounds: RoundsByGame, cfg): Player
 ```
 
 **Game-length sanity check:** to 5 match points at 2/win and 1/tie, a game is **3 rounds
-minimum** (2+2+1 = 5, or 2+2+2 = 6). Worth encoding as a test.
+minimum** (2+2+1 = 5, or 2+2+2 = 6). Encoded as a test.
+
+### `winBy` — added 2026-08-12
+
+A game is complete when a side reaches `targetMatchPoints` **and leads by at least `winBy`**.
+Default **2**: 5–3 ends it, 5–4 keeps playing. `winBy: 1` gives first-past-the-target.
+
+Two things this settles:
+
+- **A game can never end level.** At 4–4 a tied round takes both sides to 5; under the original
+  "first to 5" reading that would declare both teams winners, which is nonsense with money on
+  the table.
+- **§3.8's proposed property test is wrong** and was replaced. It asked that match points never
+  exceed `target+1`; with ties and a margin requirement a game can finish 7–5 or beyond.
+
+> ⚠️ **This is a house rule, not an NCA rule.** Searching turned up that NCA regular play is a
+> **fixed four rounds per game** rather than a race to a target — the primary rules page 404s
+> and Tracey Boards 403s, so treat that as one search-summary source, unverified. "Win by two"
+> appears in NCA material only as a tiebreaker format. Both `targetMatchPoints` and `winBy` are
+> therefore yours to set, which is exactly why they're config rather than constants.
 
 ### Settlement — confirmed rule
 

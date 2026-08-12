@@ -22,6 +22,7 @@ export const DEFAULT_SCORING: ScoringConfig = {
   matchPointsWin: 2,
   matchPointsTie: 1,
   targetMatchPoints: 5,
+  winBy: 2,
   discsPerPlayer: 6,
 };
 
@@ -126,10 +127,12 @@ export interface GameStanding {
  * Running standing across every round played so far, and whether the game is
  * over.
  *
- * **A game is complete when one side has reached `targetMatchPoints` _and_ is
- * strictly ahead.** The "strictly ahead" half matters: at 4-4 a tied round
- * takes both sides to 5, and a game cannot end level when money is riding on
- * it, so play continues until someone leads.
+ * **A game is complete when one side has reached `targetMatchPoints` and leads
+ * by at least `winBy`.** With the default `winBy: 2`, 5–3 ends it but 5–4 keeps
+ * going. Setting `winBy: 1` gives "first past the target with any lead".
+ *
+ * Either way a game can never end level — at 4–4 a tied round takes both sides
+ * to 5, and a game cannot end tied when money is riding on it.
  */
 export function gameStanding(rounds: RoundInput[], cfg: ScoringConfig): GameStanding {
   const matchPoints: Record<TeamKey, number> = { A: 0, B: 0 };
@@ -144,9 +147,14 @@ export function gameStanding(rounds: RoundInput[], cfg: ScoringConfig): GameStan
   }
 
   const target = cfg.targetMatchPoints;
+  // Tolerate a config snapshotted before `winBy` existed; 1 is the old rule.
+  const margin = cfg.winBy ?? 1;
   const leader: TeamKey | undefined =
     matchPoints.A > matchPoints.B ? "A" : matchPoints.B > matchPoints.A ? "B" : undefined;
-  const isComplete = leader !== undefined && matchPoints[leader] >= target;
+  const isComplete =
+    leader !== undefined &&
+    matchPoints[leader] >= target &&
+    matchPoints[leader] - matchPoints[otherTeam(leader)] >= margin;
 
   return {
     matchPoints,
