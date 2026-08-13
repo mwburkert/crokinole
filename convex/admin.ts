@@ -22,10 +22,12 @@
 
 import { v } from "convex/values";
 
-import { MAX_NAME_LENGTH } from "@crokinole/core";
+import { MAX_NAME_LENGTH, normaliseName } from "@crokinole/core";
 
+import type { MutationCtx } from "./_generated/server";
 import { mutation, query } from "./_generated/server";
 import { assertAdmin, assertAllowlisted } from "./lib/auth";
+import { nicknameOf, resolveNickname } from "./lib/players";
 
 const roleValidator = v.union(v.literal("admin"), v.literal("player"));
 
@@ -52,42 +54,106 @@ export const isSuperAdmin = (email: string): boolean => {
  *
  * Applies to every mutating path — role, name, email, revoke — so a second
  * admin can't quietly rename or lock out the owner.
+ *
+ * 🕐 A null `callerEmail` means the shared passphrase, which carries no
+ * identity. The guard is allowed rather than refused in that case, and the
+ * reason is worth stating: with one shared secret there is no "second admin" to
+ * protect the owner *from* — every holder is already the same, single trust
+ * level. Refusing here would only stop the owner editing their own row from
+ * their own app. The guard becomes real again the moment identities do.
  */
-function assertMayEdit(callerEmail: string, targetEmail: string): void {
+function assertMayEdit(callerEmail: string | null, targetEmail: string): void {
+  if (callerEmail === null) return;
   if (isSuperAdmin(targetEmail) && !isSuperAdmin(callerEmail)) {
     throw new Error("That account is managed by its owner and can't be changed here.");
   }
 }
 
-/** Everyone permitted, with their player record if one exists. */
+/**
+ * Refuse to remove the last admin.
+ *
+ * The identity-based version of this guard ("you can't demote yourself") can't
+ * fire under the shared passphrase, because there is no self to compare
+ * against. This one needs no identity: it just counts. Ending up with an
+ * allowlist that has no admin in it is only recoverable from the Convex
+ * dashboard.
+ */
+async function assertNotLastAdmin(ctx: MutationCtx, email: string): Promise<void> {
+  const entries = await ctx.db.query("allowlist").collect();
+  const remaining = entries.filter(
+    (entry) => entry.role === "admin" && entry.email !== email,
+  );
+  if (remaining.length === 0) {
+    throw new Error("That's the last admin — promote someone else first.");
+  }
+}
+
+/**
+ * Everyone the settings screen can act on: one row per **player**, joined to
+ * their allowlist entry if they have one, plus any allowlist entry with no
+ * player behind it.
+ *
+ * It used to be the other way round — one row per allowlist entry — which was
+ * right when everyone arrived through an invite. Under the shared passphrase
+ * nobody has an email and nobody signs in, so an allowlist-first list showed
+ * "Nobody yet" while five real players sat in the database, unnameable and
+ * unfixable from the UI. A person with no login is still a person (§3.6); the
+ * allowlist answers *what they may do*, not *whether they exist*.
+ *
+ * `email` and `role` are therefore nullable: null means "no login yet", which
+ * is every player today.
+ */
 export const listMembers = query({
-  args: {},
-  handler: async (ctx) => {
-    await assertAdmin(ctx);
+  args: { passcode: v.string() },
+  handler: async (ctx, args) => {
+    await assertAdmin(ctx, args.passcode);
 
     const entries = await ctx.db.query("allowlist").collect();
     const players = await ctx.db.query("players").collect();
-    const byEmail = new Map(
-      players.filter((p) => p.email).map((p) => [p.email as string, p]),
-    );
+    const entryByEmail = new Map(entries.map((entry) => [entry.email, entry]));
+    const claimed = new Set<string>();
 
-    return entries
-      .map((entry) => {
-        const player = byEmail.get(entry.email);
-        return {
-          email: entry.email,
-          role: entry.role,
-          invitedAt: entry.invitedAt,
-          playerId: player?._id ?? null,
-          displayName: player?.displayName ?? null,
-          isActive: player?.isActive ?? false,
-          /** True once they've actually signed in at least once. */
-          hasSignedIn: Boolean(player?.authSubject),
-          /** Drives the UI hiding edit controls rather than failing on submit. */
-          isSuperAdmin: isSuperAdmin(entry.email),
-        };
-      })
-      .sort((a, b) => (a.displayName ?? a.email).localeCompare(b.displayName ?? b.email));
+    const rows = players.map((player) => {
+      const entry = player.email ? entryByEmail.get(player.email) : undefined;
+      if (entry) claimed.add(entry.email);
+      return {
+        playerId: player._id as string | null,
+        /** The nickname — what every screen shows. */
+        displayName: nicknameOf(player) as string | null,
+        firstName: (player.firstName ?? null) as string | null,
+        lastName: (player.lastName ?? null) as string | null,
+        email: player.email ?? null,
+        role: entry?.role ?? null,
+        invitedAt: entry?.invitedAt ?? player.createdAt,
+        isActive: player.isActive,
+        /** True once they've actually signed in at least once. */
+        hasSignedIn: Boolean(player.authSubject),
+        /** Drives the UI hiding edit controls rather than failing on submit. */
+        isSuperAdmin: player.email ? isSuperAdmin(player.email) : false,
+      };
+    });
+
+    // An allowlist entry with no player row shouldn't happen — `invite` always
+    // creates one — but if it ever does, showing it is how it gets fixed.
+    for (const entry of entries) {
+      if (claimed.has(entry.email)) continue;
+      rows.push({
+        playerId: null,
+        displayName: null,
+        firstName: null,
+        lastName: null,
+        email: entry.email,
+        role: entry.role,
+        invitedAt: entry.invitedAt,
+        isActive: false,
+        hasSignedIn: false,
+        isSuperAdmin: isSuperAdmin(entry.email),
+      });
+    }
+
+    return rows.sort((a, b) =>
+      (a.displayName ?? a.email ?? "").localeCompare(b.displayName ?? b.email ?? ""),
+    );
   },
 });
 
@@ -98,17 +164,21 @@ export const listMembers = query({
  */
 export const invite = mutation({
   args: {
+    passcode: v.string(),
     email: v.string(),
-    displayName: v.string(),
+    firstName: v.string(),
+    lastName: v.optional(v.string()),
+    nickname: v.optional(v.string()),
     role: v.optional(roleValidator),
   },
   handler: async (ctx, args) => {
-    await assertAdmin(ctx);
+    await assertAdmin(ctx, args.passcode);
 
     const email = normalise(args.email);
-    const displayName = args.displayName.trim();
+    const firstName = normaliseName(args.firstName);
+    const lastName = normaliseName(args.lastName ?? "") || undefined;
     if (!email.includes("@")) throw new Error("That doesn't look like an email address.");
-    if (!displayName) throw new Error("Give them a name so they can be picked for a game.");
+    if (!firstName) throw new Error("Give them a name so they can be picked for a game.");
 
     const existing = await ctx.db
       .query("allowlist")
@@ -134,8 +204,11 @@ export const invite = mutation({
       return player._id;
     }
 
+    const existingPlayers = await ctx.db.query("players").collect();
     return await ctx.db.insert("players", {
-      displayName,
+      firstName,
+      ...(lastName ? { lastName } : {}),
+      nickname: resolveNickname(args.nickname, firstName, lastName, existingPlayers),
       email,
       isActive: true,
       createdAt: Date.now(),
@@ -151,30 +224,34 @@ export const invite = mutation({
  */
 export const updateProfile = mutation({
   args: {
+    passcode: v.string(),
     playerId: v.id("players"),
+    /** The nickname — what every screen shows. */
     displayName: v.optional(v.string()),
     email: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const caller = await assertAllowlisted(ctx);
+    const caller = await assertAllowlisted(ctx, args.passcode);
     const player = await ctx.db.get(args.playerId);
     if (!player) throw new Error("Player not found.");
 
-    const editingSelf = player._id === caller.player._id;
+    // 🕐 With no identity there is no "self", so this is false under the shared
+    // passphrase — where `role` is always admin, and the next check passes.
+    const editingSelf = player._id === caller.player?._id;
     if (!editingSelf && caller.role !== "admin") {
       throw new Error("You can only edit your own details.");
     }
     if (player.email) assertMayEdit(caller.email, player.email);
 
-    const patch: { displayName?: string; email?: string } = {};
+    const patch: { nickname?: string; email?: string } = {};
 
     if (args.displayName !== undefined) {
-      const displayName = args.displayName.trim();
-      if (!displayName) throw new Error("A player needs a name.");
-      if (displayName.length > MAX_NAME_LENGTH) {
-        throw new Error(`Names are capped at ${MAX_NAME_LENGTH} characters.`);
+      const nickname = normaliseName(args.displayName);
+      if (!nickname) throw new Error("A player needs a nickname — it's what everyone sees.");
+      if (nickname.length > MAX_NAME_LENGTH) {
+        throw new Error(`Nicknames are capped at ${MAX_NAME_LENGTH} characters.`);
       }
-      patch.displayName = displayName;
+      patch.nickname = nickname;
     }
 
     if (args.email !== undefined) {
@@ -198,16 +275,19 @@ export const updateProfile = mutation({
 });
 
 export const setRole = mutation({
-  args: { email: v.string(), role: roleValidator },
+  args: { passcode: v.string(), email: v.string(), role: roleValidator },
   handler: async (ctx, args) => {
-    const caller = await assertAdmin(ctx);
+    const caller = await assertAdmin(ctx, args.passcode);
     const email = normalise(args.email);
     assertMayEdit(caller.email, email);
 
-    if (email === caller.email && args.role !== "admin") {
-      // Locking yourself out of the only admin account is unrecoverable without
-      // opening the Convex dashboard.
-      throw new Error("You can't remove your own admin role.");
+    if (args.role !== "admin") {
+      if (email === caller.email) {
+        // Locking yourself out of the only admin account is unrecoverable
+        // without opening the Convex dashboard.
+        throw new Error("You can't remove your own admin role.");
+      }
+      await assertNotLastAdmin(ctx, email);
     }
 
     const entry = await ctx.db
@@ -225,13 +305,14 @@ export const setRole = mutation({
  * permission, it does not erase a person. Their past games still score.
  */
 export const revoke = mutation({
-  args: { email: v.string() },
+  args: { passcode: v.string(), email: v.string() },
   handler: async (ctx, args) => {
-    const caller = await assertAdmin(ctx);
+    const caller = await assertAdmin(ctx, args.passcode);
     const email = normalise(args.email);
     assertMayEdit(caller.email, email);
 
     if (email === caller.email) throw new Error("You can't revoke your own access.");
+    await assertNotLastAdmin(ctx, email);
 
     const entry = await ctx.db
       .query("allowlist")

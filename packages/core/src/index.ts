@@ -62,6 +62,8 @@ export {
 } from "./discs.js";
 export type { PlacedDisc, Region } from "./discs.js";
 
+export { defaultNickname, fullName, normaliseName } from "./names.js";
+
 export { formatCents, potCents, settle } from "./settle.js";
 
 export {

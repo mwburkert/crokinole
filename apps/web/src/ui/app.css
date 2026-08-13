@@ -1,5 +1,25 @@
 /* Layout, components, and screen-specific rules. Phone-first throughout. */
 
+/*
+ * The board button's two glyphs are the app's only green and orange, and they
+ * live here rather than in tokens.css because that palette is a real crokinole
+ * board's — maple, walnut, felt, the red of the twenty hole — and a board has
+ * neither colour on it. `--positive` is a green, but it means money, and
+ * borrowing it to say "new game" would make the next change to one of them
+ * silently change the other.
+ *
+ * **No dark-mode pair on purpose.** tokens.css re-tints its semantic colours
+ * under `prefers-color-scheme: dark`, but these two never sit on a semantic
+ * colour: the button is drawn on `--maple`, which tokens.css deliberately does
+ * not override, because a board doesn't change colour when the sun goes down.
+ * The backdrop is the same in both themes, so the ink that reads well on it is
+ * too — both are picked for roughly 3.4:1 against maple.
+ */
+:root {
+  --glyph-new: #1a8a45;
+  --glyph-resume: #cc6a10;
+}
+
 .app {
   min-height: 100dvh;
   display: flex;
@@ -577,6 +597,48 @@
   font-size: 1.7rem;
   font-weight: 800;
   line-height: 1;
+  /* Never gives up a pixel — see .scoreline__names. */
+  flex: 0 0 auto;
+}
+
+/*
+ * Who's on that side, stacked beside their score.
+ *
+ * Context, not the headline: quiet type, and the *only* flexible thing on the
+ * line, so when the card runs out of room the names ellipsise and the round
+ * score stays exactly the size it was (§3.5). Two nicknames at the 12-character
+ * cap fit either side of a three-digit score at 393px with room to spare; the
+ * ellipsis is there for a phone narrower than any we ship to.
+ *
+ * Stacked at a tighter line-height than the score is tall, so a doubles game
+ * adds names without making the pinned bar any deeper than singles.
+ */
+.scoreline__names {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+  font-size: 0.65rem;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--ink-soft);
+}
+
+.scoreline__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Black's names read out to the right of its number and are set hard against
+   it; white's mirror. Which physical side of the card that lands on is a fact
+   about the game, not about this rule. */
+.scoreline__names--black {
+  text-align: right;
+}
+
+.scoreline__names--white {
+  text-align: left;
 }
 
 .scoreline__label {
@@ -1566,22 +1628,33 @@ html { scrollbar-width: none; }
   stroke-width: 1.5;
 }
 
-/* Big enough to read at a glance, soft enough that the board still shows.
-   Walnut rather than the twenty's red — the hole is the only red thing on a
-   crokinole board and an overlay borrowing it read as a scoring mark. */
-.boardbtn__mark {
-  fill: var(--walnut);
-  opacity: 0.5;
+/*
+ * The mark that says what tapping the board does — a plus for a new game, a
+ * play triangle to resume. One shared rule so the two are unmistakably a pair:
+ * identical stroke weight, round caps and round joins on both. The plus is the
+ * iOS one — thick bars with rounded ends, not a hairline cross — and the
+ * triangle takes the same stroke over its fill so its corners round to the same
+ * radius and it carries the same optical mass.
+ *
+ * They used to be walnut at half opacity, on the reasoning that the board
+ * should show through. Full strength now, and coloured: this is the primary
+ * action in the bar and which of the two it is decides where a tap goes.
+ */
+.boardbtn__glyph {
+  stroke-width: 8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
-.boardbtn__plus {
-  stroke: var(--walnut);
-  stroke-width: 6;
-  /* Butt caps, not round — a square-ended cross reads as a deliberate mark on
-     the board rather than a soft icon floating over it. */
-  stroke-linecap: butt;
+.boardbtn__glyph--plus {
   fill: none;
-  opacity: 0.5;
+  stroke: var(--glyph-new);
+}
+
+/* Filled and stroked in the same colour — the stroke is doing the rounding. */
+.boardbtn__glyph--play {
+  fill: var(--glyph-resume);
+  stroke: var(--glyph-resume);
 }
 
 .boardbtn__hole { fill: var(--twenty); }
@@ -1594,8 +1667,7 @@ html { scrollbar-width: none; }
 
 /* You're already here — the mark has nothing left to tell you, and hiding it
    lets the board itself read clearly. */
-.tabbar__link--board[aria-current="page"] .boardbtn__mark,
-.tabbar__link--board[aria-current="page"] .boardbtn__plus {
+.tabbar__link--board[aria-current="page"] .boardbtn__glyph {
   opacity: 0;
 }
 
@@ -1624,4 +1696,116 @@ html { scrollbar-width: none; }
 
 .row--tools {
   margin-bottom: 0.25rem;
+}
+
+/* ── Passcode gate and crash screen ──────────────────────────────────────── */
+
+/*
+ * ⚠️ The gate is TEMPORARY (§7.1) — it goes when Cloudflare Access lands and
+ * asks for the identity itself. `.gate__detail` and the crash screen it dresses
+ * should stay: a rejected Convex query throws during render, and something has
+ * to be on screen when it does.
+ *
+ * No tab bar and no `.app__main` here, so this owns the whole viewport. Sized
+ * for a phone held one-handed: everything sits in the upper two thirds of a
+ * 393×852 screen, above where a keyboard would come up.
+ */
+.gate {
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: calc(env(safe-area-inset-top) + var(--gap-lg)) var(--gap)
+    calc(env(safe-area-inset-bottom) + var(--gap-lg));
+}
+
+.gate__inner {
+  width: 100%;
+  max-width: 22rem;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+  text-align: center;
+}
+
+.gate__board {
+  display: block;
+  width: 6.5rem;
+  height: 6.5rem;
+  margin: 0 auto;
+}
+
+.gate__title {
+  margin: 0;
+  font-size: 1.6rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+.gate__form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-sm);
+}
+
+.gate__label {
+  text-align: left;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+/* Overrides `.field`'s body size — a code is read back character by character. */
+.gate__input {
+  text-align: center;
+  font-size: 1.15rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+
+.gate__error {
+  margin: 0;
+  text-align: left;
+}
+
+.gate__hint {
+  margin: 0;
+}
+
+/* The raw error, kept legible but visibly not part of the app's own voice. */
+.gate__detail {
+  margin: 0;
+  max-height: 40vh;
+  overflow-y: auto;
+  padding: var(--gap-sm) var(--gap);
+  background: var(--bg-sunken);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  color: var(--ink-soft);
+  font-family: var(--font-num);
+  font-size: 0.8rem;
+  text-align: left;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/*
+ * More discs typed into the manual sheet than the format has.
+ *
+ * Sits directly above the totals row, so the counts that caused it are still on
+ * screen. Uses the sunken surface rather than an alarm colour: nothing is being
+ * lost here — a write is being refused *before* it can lose anything, which is
+ * the opposite of the silent discard this replaced.
+ */
+.manual__warn {
+  margin: var(--gap-sm) 0 0.25rem;
+  padding: var(--gap-sm) var(--gap);
+  border-radius: var(--radius);
+  background: var(--bg-sunken);
+  border: 1px solid var(--line);
+  color: var(--ink);
+  font-size: 0.85rem;
+  line-height: 1.35;
 }
