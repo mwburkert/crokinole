@@ -107,11 +107,20 @@ export function GameDetailScreen(): ReactNode {
         entered *and* corrected. A finished game had no route back into it from
         here, which meant the one screen showing a wrong number was the one
         screen you could do nothing about.
+
+        Correcting carries `from`, this page, so closing the sheet returns to
+        the round-by-round table the wrong number was spotted in. Resuming
+        carries nothing: it is the live board, not a correction, and closing its
+        scoreboard must stay on the board.
       */}
       <Link
         className="btn btn--accent btn--block btn--lg"
         to={`/games/${game.id}/play`}
-        state={game.status === "in_progress" ? undefined : { correct: true }}
+        state={
+          game.status === "in_progress"
+            ? undefined
+            : { correct: true, from: `/games/${game.id}` }
+        }
       >
         {game.status === "in_progress" ? "Resume entry" : "Correct a round"}
       </Link>

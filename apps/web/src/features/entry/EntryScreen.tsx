@@ -42,12 +42,34 @@ export function EntryScreen(): ReactNode {
   const [manualCounts, setManualCounts] = useState<{ a: RingCounts; b: RingCounts } | null>(null);
   const [totals, setTotals] = useState<{ a: number; b: number } | null>(null);
   /*
-   * "Correct" from history routes here and asks for the scoreboard straight
-   * away. Without it, correcting a finished game meant landing on the
-   * end-of-game scorecard, dismissing it, then finding the ⊞ — three taps to
-   * reach the thing you had already said you wanted.
+   * How this screen was arrived at, when it was arrived at deliberately.
+   *
+   * `correct` asks for the scoreboard straight away. Without it, correcting a
+   * finished game meant landing on the end-of-game scorecard, dismissing it,
+   * then finding the ⊞ — three taps to reach the thing you had already said you
+   * wanted.
    */
-  const correcting = (useLocation().state as { correct?: boolean } | null)?.correct === true;
+  const arrival = useLocation().state as ArrivalState | null;
+  const correcting = arrival?.correct === true;
+  /**
+   * Where closing the correction sheet goes. `null` means "close in place".
+   *
+   * Captured once, at mount, rather than read from `arrival` on each render:
+   * the URL rewrite below replaces the history entry, and a `state` that isn't
+   * deliberately carried across a `replace` is simply gone.
+   *
+   * Three arrivals, three answers. From history or a game's detail screen,
+   * `from` names the page that sent you and closing returns to it — the sheet
+   * used to just vanish, leaving you standing on the board of a game you had
+   * only opened to fix, with no way back but the tab bar. The ⊞ button on the
+   * live board carries no state at all, so this is `null` and closing stays
+   * put; it was never a detour. And a `correct` arrival with no `from` — a
+   * reload, or a pasted link — falls back to the history list, which is where
+   * both real entry points live and is never wrong enough to be a dead end.
+   */
+  const [returnTo] = useState<string | null>(() =>
+    correcting ? (arrival?.from ?? "/games") : null,
+  );
   const [showManual, setShowManual] = useState(correcting);
   const [confirming, setConfirming] = useState(false);
   /** Placement history for undo/redo. Rounds already committed use their own undo. */
@@ -73,12 +95,19 @@ export function EntryScreen(): ReactNode {
    * left holding a placeholder the seam can only guess at. Rewriting the
    * address as soon as the game is known retires the guess after one frame,
    * so the URL is shareable, reloadable, and survives the game finishing.
+   *
+   * The arrival state rides along on purpose. `navigate` writes the new entry's
+   * state from scratch, so anything not passed here is dropped — and because
+   * `KeyedEntryScreen` keys this component on the game id, the rewrite remounts
+   * it and everything seeded from `useLocation().state` is read again. Without
+   * the hand-off, a correction that arrived on a placeholder id would forget it
+   * was a correction the instant the real id landed.
    */
   useEffect(() => {
     if (game && gameId && isPendingGameId(gameId)) {
-      navigate(`/games/${game.id}/play`, { replace: true });
+      navigate(`/games/${game.id}/play`, { replace: true, state: arrival });
     }
-  }, [game, gameId, navigate]);
+  }, [arrival, game, gameId, navigate]);
 
   // A query in flight and a game that isn't there look identical through the
   // seam — both are "no game". Saying "That game is gone" on the first frame of
@@ -102,15 +131,25 @@ export function EntryScreen(): ReactNode {
   // may latch "the match is over": this is the one flag that would, and it
   // stands back down the moment the standing says the game is live again.
   /*
-   * Arriving to correct a finished game: land on its last round, not on the
-   * empty round after it. `editing === null` means "the round in play", and a
-   * finished game has none — so the sheet opened on "Round 5, in play" of a
-   * four-round game. One-shot, so paging back to the live round later still
-   * works on a game that gets un-finished by the correction.
+   * Arriving to correct a game: land on **round one**.
+   *
+   * Something has to seed it, because `editing === null` means "the round in
+   * play" and a finished game has none — left alone, the sheet opened on
+   * "Round 5, in play" of a four-round match. Round one is where it seeds
+   * because a correction is read forwards: you know a number is wrong
+   * somewhere in the match but not usually which round, and the pager walks
+   * them in the order they were played, the same order the scorecard lists
+   * them. Starting at the end meant paging backwards through the whole match
+   * to check it.
+   *
+   * One-shot, so paging away afterwards sticks — including forward onto the
+   * live round of a game that the correction has just un-finished.
    */
   if (!seededCorrection) {
     setSeededCorrection(true);
-    if (game.rounds.length > 0) setEditing(game.rounds.length - 1);
+    // A game with no rounds has nothing to page to, and `null` already means
+    // its only round, the one in play.
+    if (game.rounds.length > 0) setEditing(0);
   }
 
   if (!standing.isComplete && cardDone) setCardDone(false);
@@ -339,6 +378,20 @@ export function EntryScreen(): ReactNode {
           onClose={() => {
             setShowManual(false);
             setEditing(null);
+            /*
+             * A correction goes back to the page that sent it. Closing used to
+             * only hide the sheet, which left you on the play screen of a game
+             * you had opened solely to fix — the list you came from was gone
+             * and the board in front of you wasn't the one you asked for.
+             *
+             * `replace`, so the detour doesn't become a stop on the back stack:
+             * back from the history page goes where it always did, rather than
+             * returning to a play screen that would just reopen this sheet.
+             *
+             * `returnTo` is null for the ⊞ sheet on the live board, which is
+             * not a detour and must close exactly where it stands.
+             */
+            if (returnTo) navigate(returnTo, { replace: true });
           }}
         >
           {edited ? (
@@ -434,14 +487,17 @@ export function EntryScreen(): ReactNode {
           See the detail
         </Link>
 
-        {/* The last round is the one most likely to be wrong — it's the one
-            that ended the match — and completion is re-derived on every write,
-            so fixing it here can hand the game back to whoever was losing. */}
+        {/* Opens on round one, the same as arriving from history: one rule for
+            where a correction starts, so the sheet never depends on which door
+            you came through. Completion is re-derived on every write, so a
+            correction made here can hand the game back to whoever was losing —
+            including from round one, whose match points the rest of the match
+            was counted on top of. */}
         <button
           type="button"
           className="btn btn--ghost btn--block"
           onClick={() => {
-            setEditing(game.rounds.length - 1);
+            setEditing(0);
             setShowManual(true);
           }}
         >
@@ -601,6 +657,22 @@ export function EntryScreen(): ReactNode {
       </div>
     </div>
   );
+}
+
+/**
+ * What a deliberate arrival at this screen carries in the router's `state`.
+ *
+ * Both correction doors set it — the history list and a game's detail screen.
+ * "Resume" on an unfinished game deliberately does not: resuming is entering
+ * rounds, not correcting them, so it must behave exactly as walking up to a
+ * live board does. Neither does the tab bar, and neither does a reload, which
+ * is why every field is optional and the screen has to work with none of them.
+ */
+interface ArrivalState {
+  /** Open on the scoreboard sheet rather than the board or the scorecard. */
+  correct?: boolean;
+  /** The path the sheet's close button returns to. */
+  from?: string;
 }
 
 /** One seat on a side: the id keys the list, the nickname is what's shown. */
