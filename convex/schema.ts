@@ -28,9 +28,24 @@ export default defineSchema({
    * scores for everyone at first (§3.6).
    */
   players: defineTable({
-    displayName: v.string(),
-    /** Short form for tight mobile tables. */
-    shortName: v.optional(v.string()),
+    /** A person's real name, split so they can be found and told apart. */
+    firstName: v.string(),
+    lastName: v.optional(v.string()),
+    /**
+     * What the app actually shows — standings, seat pickers, history, the score
+     * card. Capped at `MAX_NAME_LENGTH` because every surface that lists names
+     * is width-constrained on a phone.
+     *
+     * Defaults to the first name, or first name plus last initial when that
+     * collides (`defaultNickname` in core), and is editable afterwards. It is
+     * the field the old `displayName` became; `seed:migrateNames` did the move.
+     */
+    nickname: v.string(),
+    /**
+     * Optional when an admin adds someone — you can log a game for a person who
+     * has never opened the app (§3.6). **Required** in the self-join flow,
+     * where it is the key that stops one person becoming two rows.
+     */
     email: v.optional(v.string()),
     /**
      * The `sub` claim from the Cloudflare Access JWT.
@@ -109,7 +124,16 @@ export default defineSchema({
     /** Drives the autofill on the entry screen. */
     defaultBetCents: v.optional(v.number()),
     notes: v.optional(v.string()),
-    createdBy: v.id("players"),
+    /**
+     * 🕐 Optional only while the shared passphrase is the auth model.
+     *
+     * One shared secret means there is no identity behind a call, so there is
+     * genuinely no person to record. Writing a placeholder player row would be
+     * worse than writing nothing — it reads as a claim about who did it, and
+     * that claim would be false. Absent is the honest encoding. Re-require this
+     * when the passcode goes; see `convex/lib/auth.ts`.
+     */
+    createdBy: v.optional(v.id("players")),
     createdAt: v.number(),
     updatedAt: v.number(),
     /** Soft delete only (§3.2.4). Money is involved; a mis-tap must be recoverable. */
@@ -182,10 +206,17 @@ export default defineSchema({
     updatedAt: v.number(),
   }).index("by_game", ["gameId", "index"]),
 
-  /** Append-only audit trail. Money is involved; know who changed what. */
+  /**
+   * Append-only audit trail. Money is involved; know who changed what.
+   *
+   * 🕐 While the shared passphrase is in force the *who* is unknowable, so
+   * `actorPlayerId` is absent on everything written in that window. The trail
+   * still records what changed and when, which is the part that survives the
+   * interim.
+   */
   gameEvents: defineTable({
     gameId: v.id("games"),
-    actorPlayerId: v.id("players"),
+    actorPlayerId: v.optional(v.id("players")),
     /** "created" | "roundAdded" | "roundEdited" | "deleted" | "restored" | ... */
     kind: v.string(),
     summary: v.string(),

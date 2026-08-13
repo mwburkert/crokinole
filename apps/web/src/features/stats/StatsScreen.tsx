@@ -1,7 +1,7 @@
 import { useMemo, useState, type ReactNode } from "react";
 
-import { useLeaderboard } from "../../data/store";
-import { Card, Empty, Money } from "../../ui/components";
+import { useLeaderboard, useStore } from "../../data/store";
+import { Card, Empty, Loading, Money } from "../../ui/components";
 
 type SortKey =
   | "displayName"
@@ -27,8 +27,8 @@ const LEGEND: [string, string][] = [
   ["MP+ / MP−", "Match points for / against"],
   ["Pts+ / Pts−", "Round points for / against"],
   ["Pts/rd", "Average round points — over rounds where points were recorded. — means none were."],
-  ["20s", "Twenties sunk — only where per-player detail was entered. — means untracked."],
-  ["20s/gm", "Twenties per game"],
+  ["20s", "Twenties sunk by your team — both partners are credited the full count."],
+  ["20s/gm", "Team twenties per game played"],
 ];
 
 /**
@@ -59,6 +59,7 @@ const COLUMNS: { key: SortKey; label: string }[] = [
  */
 export function StatsScreen(): ReactNode {
   const rows = useLeaderboard();
+  const { isLoading } = useStore();
   const [sort, setSort] = useState<SortKey>("netCents");
   const [showLegend, setShowLegend] = useState(false);
 
@@ -76,9 +77,14 @@ export function StatsScreen(): ReactNode {
             // read as "scored nothing" rather than "not recorded".
             pointsPerRound:
               row.roundsScored > 0 ? row.roundPointsFor / row.roundsScored : null,
-            // Same rule as Pts/rd: untracked is not zero.
+            /*
+             * NOT the same rule as Pts/rd. Twenties come from the ring counts,
+             * which come from where the chips are, so the figure is always
+             * known — 0 means the team sank none, which is a fact, not a gap.
+             * Only "played no games at all" has nothing to divide by.
+             */
             twentiesPerGame:
-              row.twentiesTracked > 0 ? row.twenties / row.gamesPlayed : null,
+              row.gamesPlayed > 0 ? row.twenties / row.gamesPlayed : null,
           };
         }),
     [rows],
@@ -94,10 +100,12 @@ export function StatsScreen(): ReactNode {
     [enriched, sort],
   );
 
-  if (sorted.length === 0) {
+  if (isLoading || sorted.length === 0) {
     return (
       <Card title="Stats">
-        <Empty>Play a game and the numbers start here.</Empty>
+        {/* Everything here is a fold over games that haven't arrived yet, so an
+            empty table is the loading state and the never-played state both. */}
+        {isLoading ? <Loading rows={5} /> : <Empty>Play a game and the numbers start here.</Empty>}
       </Card>
     );
   }
@@ -170,7 +178,7 @@ export function StatsScreen(): ReactNode {
                   <td className="num">{row.roundPointsFor}</td>
                   <td className="num">{row.roundPointsAgainst}</td>
                   <td className="num">{row.pointsPerRound === null ? "—" : row.pointsPerRound.toFixed(1)}</td>
-                  <td className="num">{row.twentiesTracked > 0 ? row.twenties : "—"}</td>
+                  <td className="num">{row.twenties}</td>
                   <td className="num">{row.twentiesPerGame === null ? "—" : row.twentiesPerGame.toFixed(1)}</td>
                 </tr>
               ))}

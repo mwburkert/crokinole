@@ -115,8 +115,12 @@ needs stateful shot-by-shot diffing. §5.6 has the cheapest first experiment.
 - `winBy: 2` and `targetMatchPoints: 5` are **house rules, not NCA**. NCA regular
   play is a fixed four rounds per game.
 - The whole app is behind auth. There is no public route.
-- "Points not recorded" is a distinct state from "scored zero", and the same
-  applies to untracked twenties. Both render "—", never 0.
+- "Points not recorded" is a distinct state from "scored zero". Round points
+  render "—" when a round carries only an outcome.
+  > **Corrected 2026-08-12 (later):** this said the same applied to twenties.
+  > It no longer does. Twenties are now derived from team ring counts, which are
+  > always known, so a team that sank none genuinely scored 0 and renders 0.
+  > Marley's row is the illustration: `Pts/rd` "—", `20s` 0.
 
 ## How to work
 

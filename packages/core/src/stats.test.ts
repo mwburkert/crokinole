@@ -110,18 +110,48 @@ describe("aggregateStats", () => {
     expect(rows[0]?.winPct).toBe(0);
   });
 
-  it("totals twenties only where per-player detail was entered", () => {
+  /*
+   * The rule the owner stated: a figure earned by a team belongs to both
+   * partners in full, not halved between them. A disc carries a colour, not a
+   * person, so anything finer would be invented.
+   */
+  it("credits each partner the team's full twenties, not a share", () => {
     const game = aWin("g1", NIGHT);
     const first = game.rounds[0];
     if (first) {
-      first.playerStats = [
-        { playerId: "p1", twenties: 2 },
-        { playerId: "p2", twenties: 1 },
-      ];
+      first.A = { ...first.A, twenties: 3 };
+      first.B = { ...first.B, twenties: 1 };
     }
     const rows = aggregateStats([game]);
-    expect(rowFor(rows, "p1")?.twenties).toBe(2);
-    expect(rowFor(rows, "p4")?.twenties).toBe(0);
+    // p1 and p2 are team A; each gets all three, not 1.5.
+    expect(rowFor(rows, "p1")?.twenties).toBe(3);
+    expect(rowFor(rows, "p2")?.twenties).toBe(3);
+    expect(rowFor(rows, "p3")?.twenties).toBe(1);
+    expect(rowFor(rows, "p4")?.twenties).toBe(1);
+  });
+
+  it("credits each partner the team's full round points, not a share", () => {
+    const rows = aggregateStats([aWin("g1", NIGHT)]);
+    const a1 = rowFor(rows, "p1");
+    const a2 = rowFor(rows, "p2");
+    expect(a1?.roundPointsFor).toBe(a2?.roundPointsFor);
+    expect(a1?.roundPointsFor).toBeGreaterThan(0);
+    // What one side scored is what the other conceded — both in full.
+    expect(rowFor(rows, "p3")?.roundPointsAgainst).toBe(a1?.roundPointsFor);
+  });
+
+  it("reports zero twenties as zero, never as unknown", () => {
+    // Outcome-only rounds (the 5 August night) carry no ring counts at all.
+    // Points are correctly unknown there; twenties are genuinely none.
+    const game = aWin("g1", NIGHT);
+    for (const round of game.rounds) {
+      round.A = { twenties: 0, fifteens: 0, tens: 0, fives: 0 };
+      round.B = { twenties: 0, fifteens: 0, tens: 0, fives: 0 };
+      round.resultOverride = "A";
+    }
+    const rows = aggregateStats([game]);
+    expect(rowFor(rows, "p1")?.twenties).toBe(0);
+    expect(rowFor(rows, "p1")?.roundsScored).toBe(0);
   });
 
   it("sorts winners to the top", () => {

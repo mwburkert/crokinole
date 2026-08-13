@@ -10,7 +10,7 @@ import { useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 
 import { useNights, useStore } from "../../data/store";
-import { Badge, Card, Empty, Money } from "../../ui/components";
+import { Badge, Card, Empty, Loading, Money } from "../../ui/components";
 
 /**
  * History (§3.5), grouped by night.
@@ -21,19 +21,33 @@ import { Badge, Card, Empty, Money } from "../../ui/components";
  */
 export function HistoryScreen(): ReactNode {
   const nights = useNights();
-  const { players, softDelete, currentEmail, isSuperAdmin, members } = useStore();
+  const { players, softDelete, currentEmail, isSuperAdmin, isAdmin, members, isLoading } =
+    useStore();
 
   // Who am I, as a player id — so a game can tell whether I was in it.
   const myPlayerId = members.find((member) => member.email === currentEmail)?.playerId ?? null;
+
+  /*
+   * 🕐 The shared passphrase carries no identity, so "was I in this game?"
+   * has no answer: `currentEmail` is "" and every member's email is null, so
+   * the lookup above never matches and `isSuperAdmin("")` is false. That made
+   * `canManage` false for everyone and silently removed Resume and Delete from
+   * every row — an abandoned game could then only be deleted from its own
+   * detail screen. With one shared secret everybody is equally trusted, which
+   * is the same rule `convex/admin.ts` and the seam already apply when there is
+   * no caller to compare against.
+   */
+  const anonymous = currentEmail === "";
   const [expanded, setExpanded] = useState<string | null>(null);
 
   const nameOf = (id: string): string =>
     players.find((player) => player.id === id)?.displayName ?? "?";
 
-  if (nights.length === 0) {
+  if (isLoading || nights.length === 0) {
     return (
       <Card>
-        <Empty>Nothing logged yet.</Empty>
+        {/* No nights yet and no nights *so far* look identical from here. */}
+        {isLoading ? <Loading rows={4} /> : <Empty>Nothing logged yet.</Empty>}
       </Card>
     );
   }
@@ -55,6 +69,7 @@ export function HistoryScreen(): ReactNode {
               game={game}
               nameOf={nameOf}
               canManage={
+                (anonymous && isAdmin) ||
                 isSuperAdmin(currentEmail) ||
                 (myPlayerId !== null &&
                   [...game.teams.A.playerIds, ...game.teams.B.playerIds].includes(myPlayerId))
@@ -132,18 +147,42 @@ function GameRow({
 
       {open ? (
         <div className="matchup__detail">
-          {unfinished ? (
+          {/*
+            Manage controls for *any* game, finished or not.
+             *
+             * They used to render only on an unfinished game, so a night that
+             * was already scored — the one where a wrong number actually costs
+             * somebody money — could not be corrected or removed from here at
+             * all. "Correct" goes to the play screen, which already knows how
+             * to page back through committed rounds and re-derive the standing
+             * from a correction, including un-finishing a finished game.
+             *
+             * `canManage` is the admin check. Under the shared passphrase that
+             * is everyone holding the code, because one secret cannot tell two
+             * people apart — see `convex/lib/auth.ts`. It narrows to the
+             * allowlist's admins the moment identities are real, with no change
+             * needed here.
+          */}
+          {canManage || unfinished ? (
             <div className="spread" style={{ marginBottom: "0.5rem" }}>
-              <Badge live>Unfinished</Badge>
-              {/* Abandoned games are only the business of the people who were in
-                  them — anyone else seeing a Delete button on someone else's
-                  night is an invitation to a mistake. */}
+              {unfinished ? <Badge live>Unfinished</Badge> : <span />}
               {canManage ? (
                 <span className="row" style={{ gap: "0.4rem" }}>
-                  <Link className="btn btn--accent" to={`/games/${game.id}/play`}>
-                    Resume
+                  <Link
+                    className="btn btn--accent"
+                    to={`/games/${game.id}/play`}
+                    // Ask for the scoreboard on arrival: correcting a finished
+                    // game otherwise opens on its end-of-game scorecard.
+                    state={unfinished ? undefined : { correct: true }}
+                  >
+                    {unfinished ? "Resume" : "Correct"}
                   </Link>
-                  <button type="button" className="btn btn--ghost" onClick={onDelete}>
+                  <button
+                    type="button"
+                    className="btn btn--ghost"
+                    onClick={onDelete}
+                    aria-label={`Delete the ${nameOf(game.teams.A.playerIds[0] ?? "")} game`}
+                  >
                     Delete
                   </button>
                 </span>
