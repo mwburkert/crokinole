@@ -8,8 +8,21 @@ import {
 } from "@crokinole/core";
 import { useState, type ReactNode } from "react";
 
+import "../../ui/manual.css";
+
 /** A side's colour, as a column heading. */
 const labelFor = (color: DiscColor): string => (color === "black" ? "Black" : "White");
+
+/**
+ * The class suffix that greys a zero out.
+ *
+ * A column is five numbers and in most rounds three or four of them are 0.
+ * Every one of them drawn in full ink meant the column had to be *read* rather
+ * than glanced at; quietening the zeros leaves the counts that happened
+ * standing on their own. The colours are in `manual.css` so they follow the
+ * scheme.
+ */
+const quiet = (value: number): string => (value === 0 ? " is-zero" : "");
 
 const RINGS: { key: keyof RingCounts; label: string }[] = [
   { key: "twenties", label: "20" },
@@ -200,7 +213,7 @@ export function ManualEntry({
             −
           </button>
           <input
-            className="manual__field num"
+            className={`manual__field num${quiet(counts[ring.key])}`}
             inputMode="numeric"
             value={counts[ring.key]}
             aria-label={`${ring.label}s for ${label}`}
@@ -230,7 +243,7 @@ export function ManualEntry({
           −
         </button>
         <input
-          className="manual__field num"
+          className={`manual__field num${quiet(gutter)}`}
           inputMode="numeric"
           value={gutter}
           aria-label={`Gutter discs for ${label}`}
@@ -248,7 +261,15 @@ export function ManualEntry({
           +
         </button>
       </div>
-      <div className="manual__total num">{roundPoints(counts, config)}</div>
+      {/* The column's own total follows the same rule as the fields above it:
+          a side that scored nothing this round says so quietly. */}
+      <div className={`manual__total num${quiet(roundPoints(counts, config))}`}>
+        {roundPoints(counts, config)}
+      </div>
+      {/* The disc tally stays uniformly faint, zero or not. It is a "have I
+          accounted for all twelve?" readout rather than a count of where chips
+          landed, and giving it the same ink as a score would put a second
+          emphasised number under the one that matters. */}
       <div className="faint" style={{ textAlign: "center", fontSize: "0.7rem" }}>
         {counts.twenties + counts.fifteens + counts.tens + counts.fives + gutter}/{budget}
       </div>

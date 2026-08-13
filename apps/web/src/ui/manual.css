@@ -1,0 +1,29 @@
+/*
+ * The manual scoring sheet — the score tracker, and the same sheet again when
+ * a committed round is opened from history to be corrected.
+ *
+ * One rule lives here: **a zero is quiet, a count is not.**
+ *
+ * Each column is five number fields stacked 20 / 15 / 10 / 5 / gutter, and in a
+ * real round most of them are 0. Drawn in full ink they all shouted equally, so
+ * reading where the chips actually landed meant reading five numbers instead of
+ * spotting the two that weren't zero. Grey for nothing there, ink for a count
+ * that means something, and the shape of the round reads at a glance.
+ *
+ * Both colours come from tokens.css, which re-tints them for dark mode — so
+ * this is a contrast relationship rather than a pair of hard-coded greys, and
+ * it survives the scheme flipping.
+ *
+ * Compound selectors so the zero rule wins against `.manual__field`'s own
+ * `color` in app.css regardless of which sheet the bundler emits first.
+ */
+
+.manual__field,
+.manual__total {
+  color: var(--ink);
+}
+
+.manual__field.is-zero,
+.manual__total.is-zero {
+  color: var(--ink-faint);
+}

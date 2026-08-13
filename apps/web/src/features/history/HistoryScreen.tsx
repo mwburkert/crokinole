@@ -171,9 +171,16 @@ function GameRow({
                   <Link
                     className="btn btn--accent"
                     to={`/games/${game.id}/play`}
-                    // Ask for the scoreboard on arrival: correcting a finished
-                    // game otherwise opens on its end-of-game scorecard.
-                    state={unfinished ? undefined : { correct: true }}
+                    // `correct` asks for the scoreboard on arrival: correcting
+                    // a finished game otherwise opens on its end-of-game
+                    // scorecard. `from` is this list, so closing the sheet
+                    // comes back to it instead of stranding you on the board of
+                    // a game you only opened to fix.
+                    //
+                    // Resume sends neither. It is not a correction — it is the
+                    // live board, and it must arrive the way the tab bar's
+                    // Resume does.
+                    state={unfinished ? undefined : { correct: true, from: "/games" }}
                   >
                     {unfinished ? "Resume" : "Correct"}
                   </Link>

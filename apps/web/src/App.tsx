@@ -17,8 +17,29 @@ import { StatsScreen } from "./features/stats/StatsScreen";
  * AUD on every call.
  */
 function TabBar(): ReactNode {
-  const { isLoading } = useStore();
+  const { isLoading, isCreatingGame } = useStore();
   const live = useLiveGame();
+  /*
+   * The two moments in which the database has not yet said whether there is a
+   * game to resume. They arrive from opposite directions and both end with
+   * `live === undefined`, which is why they share a branch:
+   *
+   *  - `isLoading` — the games subscription hasn't delivered anything yet, so a
+   *    game may well be running and we simply can't see it. Cold load.
+   *  - `isCreatingGame && !live` — `createGame` has been called and the setup
+   *    screen has already navigated to /games/<placeholder>/play, but the
+   *    Convex insert hasn't landed. `isLoading` is long since false here, so
+   *    without this the bar rendered the *New* branch for that one round trip
+   *    and the button flashed a green cross pointing at /games/new the instant
+   *    the setup screen went away. Read `isCreatingGame`'s doc comment in the
+   *    store: it is derived during render precisely so this flips back on the
+   *    same commit the game lands on, with no trailing frame to paper over.
+   *
+   * `&& !live` because the previous game is still live while the next one is
+   * being born — going straight from one game to another must keep offering
+   * Resume rather than blanking the button for a round trip.
+   */
+  const waiting = isLoading || (isCreatingGame && !live);
   return (
     <nav className="tabbar" aria-label="Main">
       <NavLink to="/" className="tabbar__link" end>
@@ -41,23 +62,29 @@ function TabBar(): ReactNode {
       {/* The primary action, shaped like the thing it starts. Rides above the
           bar with a collar of the bar's own colour, which is what cuts the top
           line and reads as a bulge. */}
-      {isLoading ? (
+      {waiting ? (
         /*
          * Whether this is "Resume" or "New" is a fact about the database, and
-         * for the first frames we don't have it: `live` is undefined because
-         * the games haven't arrived, which looks exactly like there being no
-         * game in progress. Left alone, the button says New and points at
-         * /games/new — so a mid-game refresh followed by a tap on the biggest
-         * target on screen starts a *second* game against the same four people,
-         * and the real one is stranded in history.
+         * in the two moments listed above we don't have it: `live` is undefined
+         * because the games haven't arrived (or the new one hasn't been
+         * inserted yet), which looks exactly like there being no game in
+         * progress. Left alone, the button says New and points at /games/new —
+         * so a mid-game refresh followed by a tap on the biggest target on
+         * screen starts a *second* game against the same four people, and the
+         * real one is stranded in history.
          *
          * The other two options were worse. Guessing "Resume" needs an id we
          * don't have. Keeping the link live and correcting the label a moment
          * later means the tap that lands in that moment still navigates
          * wrongly, which is the case we're here to fix. So: hold the shape,
          * hold the space, take no tap, claim nothing. It costs a beat of
-         * unavailability on a cold load and nothing at all afterwards —
-         * `isLoading` never goes true again for reactive updates.
+         * unavailability on a cold load and one round trip after Start game,
+         * and nothing at all otherwise.
+         *
+         * A timeout, a fade or a transition delay would only move the flash
+         * behind a curtain — the button would still be claiming "New" while it
+         * was hidden, and a tap during the curtain would still go to the wrong
+         * place. The cure is to not make the claim.
          */
         <button
           type="button"
@@ -66,7 +93,7 @@ function TabBar(): ReactNode {
           aria-busy="true"
         >
           <span className="boardbtn" aria-hidden="true">
-            {/* No mark and no plus: both are the claim we can't make yet. */}
+            {/* No mark at all: either one is a claim we can't make yet. */}
             <BoardGlyph />
           </span>
           Board
@@ -91,8 +118,8 @@ function TabBar(): ReactNode {
       </NavLink>
       {/* The gear used to live in a title bar that existed only to hold it. */}
       <NavLink to="/admin" className="tabbar__link">
-        <span className="tabbar__glyph" aria-hidden="true">
-          ⚙
+        <span className="tabbar__glyph tabbar__glyph--icon" aria-hidden="true">
+          <GearGlyph />
         </span>
         Settings
       </NavLink>
@@ -101,8 +128,44 @@ function TabBar(): ReactNode {
 }
 
 /**
+ * Settings, drawn to belong to the tray.
+ *
+ * Its four neighbours are literal text characters — ◎ ▤ ▦ — which every
+ * platform resolves out of its symbol font: flat, monochrome, `currentColor`,
+ * so they go faint with the rest of the bar and red on the current page. ⚙
+ * (U+2699) does not: Windows and iOS both hand it to the *emoji* font, so the
+ * one tab in five came back as a full-colour picture at its own weight, ignored
+ * the tab's colour entirely, and read as something pasted in from another app.
+ *
+ * A variation selector to force text presentation is a request, not a
+ * guarantee, and it fails differently on every platform. So the gear is drawn
+ * here instead: a cog at 20 of the 24-unit box, matching the ink the symbol
+ * characters put down, stroked in `currentColor` so it inherits every state the
+ * others do.
+ */
+function GearGlyph(): ReactNode {
+  return (
+    <svg viewBox="0 0 24 24" className="gearglyph" aria-hidden="true" focusable="false">
+      {/*
+       * Eight teeth on the diagonals and the axes, each a radial stub from r=6.6
+       * to r=10. They start inside the body's stroke so the two read as one
+       * solid cog rather than a ring with spokes leaning on it.
+       */}
+      <path
+        className="gearglyph__teeth"
+        d="M12 2 V5.4 M12 22 V18.6 M2 12 H5.4 M22 12 H18.6
+           M19.07 4.93 L16.67 7.33 M4.93 19.07 L7.33 16.67
+           M4.93 4.93 L7.33 7.33 M19.07 19.07 L16.67 16.67"
+      />
+      {/* The body is a stroked circle, so the hole in the middle costs nothing. */}
+      <circle cx="12" cy="12" r="6.2" className="gearglyph__body" />
+    </svg>
+  );
+}
+
+/**
  * The board, drawn small. `mark` is the overlay that says what tapping it does
- * — a play triangle to resume, a plus to start — and is left off entirely while
+ * — a play triangle to resume, a cross to start — and is left off entirely while
  * the store hasn't said which it is.
  */
 function BoardGlyph({ mark }: { mark?: "resume" | "new" }): ReactNode {
@@ -120,20 +183,36 @@ function BoardGlyph({ mark }: { mark?: "resume" | "new" }): ReactNode {
       <circle cx="24" cy="24" r="2.6" className="boardbtn__hole" />
       {/*
        * Two states of one control, so they are drawn as one glyph in two
-       * shapes: same stroke weight, same rounded joins, matched optical mass.
-       * Both are stroked — the triangle is filled *and* stroked — which is what
-       * gives the play mark the same corner radius as the plus's caps, and what
-       * makes the pair read as siblings rather than two borrowed icons. Sizes
-       * are the inner paths; the stroke grows each by half its width.
+       * shapes: both filled outlines, no stroke on either, matched span and
+       * matched optical mass. What they are is the whole message — a tap here
+       * either resumes a game or starts one — so each has to be unmistakable
+       * from across a table at 3.6rem.
+       *
+       * Both used to be *stroked* at width 8 with round caps and joins, on the
+       * theory that a shared stroke made them siblings. It made them blobs: the
+       * cross's round caps swelled it into a soft clover, and the triangle,
+       * filled *and* stroked, grew 4 units in every direction into an orange
+       * lozenge with no point on it. Geometry does the matching now.
+       *
+       * The triangle is placed on its centroid, not its bounding box — a right-
+       * pointing triangle centred by its box reads as sliding off to the left.
        */}
       {mark === "resume" ? (
         <path
-          d="M17.5 13.8 L35 24 L17.5 34.2 Z"
+          d="M16.5 10.5 L38.5 24 L16.5 37.5 Z"
           className="boardbtn__glyph boardbtn__glyph--play"
         />
       ) : null}
+      {/*
+       * A Greek cross: arms 26 long and 8 thick about the centre, drawn as a
+       * filled outline so the ends are square by construction. Nothing here can
+       * be softened by a cap or a join, which is the point.
+       */}
       {mark === "new" ? (
-        <path d="M24 11.5 V36.5 M11.5 24 H36.5" className="boardbtn__glyph boardbtn__glyph--plus" />
+        <path
+          d="M20 11 H28 V20 H37 V28 H28 V37 H20 V28 H11 V20 H20 Z"
+          className="boardbtn__glyph boardbtn__glyph--plus"
+        />
       ) : null}
     </svg>
   );

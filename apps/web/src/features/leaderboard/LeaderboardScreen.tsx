@@ -13,7 +13,6 @@ import { Link } from "react-router-dom";
 
 import { useLiveGame, useStore, useVisibleGames } from "../../data/store";
 import { Card, Empty, Loading, Money } from "../../ui/components";
-import { JoinSheet } from "../join/JoinSheet";
 
 interface Row extends PlayerStats {
   displayName: string;
@@ -37,8 +36,6 @@ export function LeaderboardScreen(): ReactNode {
   const live = useLiveGame();
   const { players, presentIds, togglePresent, isLoading } = useStore();
   const [showAbsent, setShowAbsent] = useState(true);
-  /** The self-join sheet, opened from under the presence list. */
-  const [joining, setJoining] = useState(false);
 
   const tonight = currentNightKey();
   const nights = useMemo(() => {
@@ -172,6 +169,12 @@ export function LeaderboardScreen(): ReactNode {
               below, because it answers the question you ask *at* the list: the
               person in front of you isn't on it. Secondary weight throughout —
               "New game" is the thing this screen is for.
+
+              A link to `/join`, not a sheet. That route is the single intake
+              screen — the same one the Settings QR code points at — so the
+              person being handed the phone fills in the same form whether they
+              scanned it or you tapped this. Reached from in here the code is
+              already stored, so it opens straight on the email step.
             */}
             <div className="spread">
               <label className="toggle">
@@ -182,9 +185,9 @@ export function LeaderboardScreen(): ReactNode {
                 />
                 Show inactive
               </label>
-              <button type="button" className="btn btn--ghost" onClick={() => setJoining(true)}>
+              <Link className="btn btn--ghost" to="/join">
                 Add player
-              </button>
+              </Link>
             </div>
           </>
         ) : null}
@@ -218,8 +221,6 @@ export function LeaderboardScreen(): ReactNode {
           </Link>
         </div>
       ) : null}
-
-      {joining ? <JoinSheet onClose={() => setJoining(false)} /> : null}
     </div>
   );
 }

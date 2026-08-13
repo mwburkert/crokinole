@@ -363,6 +363,40 @@
   line-height: 1;
 }
 
+/*
+ * A drawn glyph standing in for a text one — see `GearGlyph` in App.tsx for why
+ * Settings can't be a character. The box is the same 1.5rem line box its text
+ * siblings occupy and the artwork is centred in it, so the row of five keeps one
+ * baseline whichever kind of glyph a tab happens to use.
+ */
+.tabbar__glyph--icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 1.5rem;
+}
+
+.gearglyph {
+  display: block;
+  width: 1.5rem;
+  height: 1.5rem;
+}
+
+/*
+ * Stroked, not filled, and in `currentColor` — the symbol characters beside it
+ * are line drawings that take the tab's colour, and the gear has to do both or
+ * it stops being one of them. Butt caps: the teeth of a cog are cut square.
+ */
+.gearglyph__body,
+.gearglyph__teeth {
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: butt;
+}
+
+.gearglyph__body { stroke-width: 3.4; }
+.gearglyph__teeth { stroke-width: 3; }
+
 /* ── Generic bits ────────────────────────────────────────────────────────── */
 
 .card {
@@ -436,6 +470,27 @@
 }
 
 /* ── Buttons ─────────────────────────────────────────────────────────────── */
+
+/*
+ * A button is a class here, not an element: roughly half of these are `<Link>`,
+ * because "Continue game", "New game", "Correct", "Resume", "Start next game,
+ * same 4" and "See the detail" all navigate. An anchor comes with an underline,
+ * so every one of those titles was rendering underlined inside a bordered
+ * button while its `<button>` siblings were not.
+ *
+ * The other button-shaped classes below take the same declaration for the same
+ * reason. All of them are `<button>` today and so none of them is underlined
+ * today — but that was true of `.btn` once too, and the fix is a line of CSS
+ * against a fault that costs a re-review of every screen to find.
+ */
+.btn,
+.chip,
+.menu__item,
+.tools__btn,
+.iconbtn,
+.daynav__btn {
+  text-decoration: none;
+}
 
 .btn {
   min-height: var(--tap);
@@ -1609,14 +1664,26 @@ html { scrollbar-width: none; }
   margin-top: -1.5rem;
   border-radius: 50%;
   /* A collar of the bar's own colour — this is what cuts the top border line
-     and makes the bar look like it bulges around the button. */
+     and makes the bar look like it bulges around the button. It is an outer
+     box-shadow on an element with no background of its own, so it paints
+     strictly *behind* the board: the collar can never eat into the artwork, and
+     no `overflow` is clipped to it. */
   box-shadow: 0 0 0 6px var(--bg-raised), 0 3px 8px rgb(0 0 0 / 0.28);
 }
 
+/*
+ * `overflow: visible` because an SVG root clips to its viewBox by default, and
+ * that clip is flat-sided: anything drawn at the very edge of the 48-unit box
+ * comes back sliced square at the top, bottom, left and right. A 3-wide ring
+ * stroked on the r=23 frame did exactly that — its outer edge landed at 24.5 —
+ * and the beige collar took the blame for a cut the SVG was making itself.
+ * Nothing overflows today, and nothing added here should be able to.
+ */
 .boardbtn svg {
   display: block;
   width: 100%;
   height: 100%;
+  overflow: visible;
 }
 
 .boardbtn__frame { fill: var(--walnut); }
@@ -1629,47 +1696,50 @@ html { scrollbar-width: none; }
 }
 
 /*
- * The mark that says what tapping the board does — a plus for a new game, a
- * play triangle to resume. One shared rule so the two are unmistakably a pair:
- * identical stroke weight, round caps and round joins on both. The plus is the
- * iOS one — thick bars with rounded ends, not a hairline cross — and the
- * triangle takes the same stroke over its fill so its corners round to the same
- * radius and it carries the same optical mass.
+ * The mark that says what tapping the board does — a Greek cross for a new
+ * game, a play triangle to resume.
+ *
+ * **Both are filled outlines and neither is stroked.** The pair used to share a
+ * `stroke-width: 8` with round caps and round joins, on the reasoning that one
+ * stroke made them siblings. What it actually made them was blobs: at 3.6rem
+ * the caps rounded the cross into a soft clover with no square end anywhere on
+ * it, and the triangle — filled *and* stroked in the same colour — grew four
+ * units in every direction into an orange lozenge you could not call a play
+ * mark. The geometry in App.tsx now carries the matching instead: equal spans,
+ * comparable ink, square corners on the cross because the path has square
+ * corners. Adding a stroke back to either would undo all of it.
  *
  * They used to be walnut at half opacity, on the reasoning that the board
  * should show through. Full strength now, and coloured: this is the primary
  * action in the bar and which of the two it is decides where a tap goes.
  */
 .boardbtn__glyph {
-  stroke-width: 8;
-  stroke-linecap: round;
-  stroke-linejoin: round;
+  stroke: none;
 }
 
 .boardbtn__glyph--plus {
-  fill: none;
-  stroke: var(--glyph-new);
+  fill: var(--glyph-new);
 }
 
-/* Filled and stroked in the same colour — the stroke is doing the rounding. */
 .boardbtn__glyph--play {
   fill: var(--glyph-resume);
-  stroke: var(--glyph-resume);
 }
 
 .boardbtn__hole { fill: var(--twenty); }
 
-/* The active ring hugs the board itself, not the collar around it. */
-.tabbar__link--board[aria-current="page"] .boardbtn__frame {
-  stroke: var(--accent);
-  stroke-width: 3;
-}
-
-/* You're already here — the mark has nothing left to tell you, and hiding it
-   lets the board itself read clearly. */
-.tabbar__link--board[aria-current="page"] .boardbtn__glyph {
-  opacity: 0;
-}
+/*
+ * No current-page treatment on this button, deliberately — neither a ring round
+ * the board nor a hidden mark.
+ *
+ * The ring was an accent stroke on the r=23 frame, which put its outer edge at
+ * 24.5 in a 48-unit viewBox and got itself sliced flat on all four sides by the
+ * SVG's own clip (see `.boardbtn svg`). Hiding the mark was worse than ugly: a
+ * live game links this tab at /games/:id/play, so `aria-current="page"` is true
+ * exactly while a game is running — the one time the play triangle has
+ * something to say — and the button sat there completely blank. The label below
+ * it already goes accent-coloured with every other tab, which is all the
+ * "you're here" any of them get.
+ */
 
 /* ── Entry screen rhythm ─────────────────────────────────────────────────── */
 

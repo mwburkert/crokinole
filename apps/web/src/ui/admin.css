@@ -1,0 +1,94 @@
+/*
+ * Settings: the invite card and the forms behind the roster.
+ *
+ * Everything structural is already in `app.css` — `.card`, `.field`, `.btn`,
+ * `.segmented`, `.prow`, `.menu`. This file adds only the two things that file
+ * has no vocabulary for: a labelled field group, and the invite card's stack.
+ *
+ * Phone-first (393px). Labels sit above their fields for the same reason the
+ * join sheet's do: a label beside a field is the first thing to wrap badly at
+ * this width. Every control inherits `.field` / `.btn`, both already `--tap`
+ * (48px) tall, so nothing here sets a height.
+ */
+
+.aform {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+}
+
+.aform__group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-xs);
+}
+
+/* Matches the join sheet's field label — the two are the same kind of thing. */
+.aform__label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+/* "optional" is a note, not part of the name of the field. */
+.aform__optional {
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 500;
+}
+
+.aform__hint {
+  margin: 0;
+}
+
+.aform__actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-sm);
+}
+
+/*
+ * The invite card.
+ *
+ * One column: the tier toggle (admins only), the QR, the origin, Copy, and the
+ * one line of caution that changes with the tier. No heading — a QR code the
+ * size of a beer mat does not need a caption telling you what it is, and the
+ * card is the first thing on the screen.
+ */
+.invite {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+}
+
+/*
+ * The code is the point of the card, so it gets the room. `min-height` holds the
+ * space across a tier flip: the two codes make different-sized symbols, and
+ * without it the Copy button jumps under a thumb that is already reaching.
+ */
+.invite__qr {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 170px;
+  padding: var(--gap-xs) 0;
+}
+
+/*
+ * The origin, never the link — printing the link would print the code. Broken
+ * anywhere rather than allowed to widen the card, since a long preview
+ * hostname is the one that has to fit a 393px screen.
+ */
+.invite__origin {
+  margin: 0;
+  text-align: center;
+  word-break: break-all;
+}
+
+.invite__note {
+  margin: 0;
+  text-align: center;
+  line-height: 1.4;
+}
