@@ -28,7 +28,6 @@ function emptyStats(playerId: PlayerId): PlayerStats {
     roundPointsAgainst: 0,
     roundsScored: 0,
     twenties: 0,
-    twentiesTracked: 0,
     netCents: 0,
   };
 }
@@ -82,17 +81,25 @@ export function aggregateStats(
     const settlements = new Map<PlayerId, number>();
     for (const entry of settle(game)) settlements.set(entry.playerId, entry.netCents);
 
-    const twentiesByPlayer = new Map<PlayerId, number>();
-    const trackedByPlayer = new Map<PlayerId, number>();
+    /**
+     * Twenties are a **team** figure, taken from the ring counts.
+     *
+     * They used to come from `round.playerStats`, which nobody filled in, so
+     * the Stats screen's two twenties columns read "—" forever — the UI
+     * promising what the data never delivered. Ring counts are always known,
+     * so this always has an answer.
+     *
+     * A disc carries a colour, not a person: who sank it is not recoverable
+     * from the board, and the board is the single source of truth for every
+     * count (that is the whole point of placing chips rather than tapping
+     * numbers). So the team's total is credited to each partner in full,
+     * exactly as round points already are — see `roundPointsFor` below. If two
+     * partners together sank three twenties, they each have three.
+     */
+    const teamTwenties: Record<TeamKey, number> = { A: 0, B: 0 };
     for (const round of game.rounds) {
-      for (const stat of round.playerStats ?? []) {
-        if (stat.twenties === undefined) continue;
-        twentiesByPlayer.set(
-          stat.playerId,
-          (twentiesByPlayer.get(stat.playerId) ?? 0) + stat.twenties,
-        );
-        trackedByPlayer.set(stat.playerId, (trackedByPlayer.get(stat.playerId) ?? 0) + 1);
-      }
+      teamTwenties.A += round.A.twenties;
+      teamTwenties.B += round.B.twenties;
     }
 
     const members: [TeamKey, PlayerId[]][] = [
@@ -112,8 +119,7 @@ export function aggregateStats(
         row.roundPointsFor += standing.roundPointsFor[team];
         row.roundPointsAgainst += standing.roundPointsFor[against];
         row.roundsScored += standing.roundsScored;
-        row.twenties += twentiesByPlayer.get(playerId) ?? 0;
-        row.twentiesTracked += trackedByPlayer.get(playerId) ?? 0;
+        row.twenties += teamTwenties[team];
         row.netCents += settlements.get(playerId) ?? 0;
       }
     }

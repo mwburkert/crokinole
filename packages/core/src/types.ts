@@ -240,15 +240,19 @@ export interface PlayerStats {
    * than 0.
    */
   roundsScored: number;
-  /** Only counts rounds where per-player detail was actually entered. */
-  twenties: number;
   /**
-   * Rounds in which this player's twenties were actually recorded.
+   * Twenties sunk by this player's **team**, credited to them in full.
    *
-   * Zero means nobody entered per-player detail — which is NOT "sank none".
-   * Same distinction as `roundsScored`: a total of 0 over 0 tracked rounds is
-   * unknown, and rendering it as a number claims a fact we don't have.
+   * Derived from the ring counts, which are themselves derived from where the
+   * chips are — so unlike points, this is always known and 0 genuinely means
+   * "sank none" rather than "nobody wrote it down". There is no companion
+   * `twentiesTracked` for that reason, and no "—" to render.
+   *
+   * A disc carries a colour, not a person, so who sank it cannot be recovered
+   * from the board. Splitting the total between partners would invent a fact;
+   * crediting each of them the team's full count states exactly what is known
+   * — the same treatment `roundPointsFor` gets.
    */
-  twentiesTracked: number;
+  twenties: number;
   netCents: number;
 }
