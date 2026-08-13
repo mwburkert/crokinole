@@ -17,6 +17,8 @@ in-place.
 | [05-PHASE-3-VISION.md](05-PHASE-3-VISION.md) | Camera auto-scoring. Exploratory. | exploratory |
 | [06-ORCHESTRATION.md](06-ORCHESTRATION.md) | Running parallel agents on this without collisions | ready |
 | [07-PLATFORM.md](07-PLATFORM.md) | `burkert.app` — one domain, one login, three apps, ~$14/yr | ready |
+| **[08-SEQUENCING.md](08-SEQUENCING.md)** | **What's left, in order. Dependencies, effort, owner-vs-agent, escalations.** | ⬅️ **new 2026-08-12** |
+| [../qa/](../qa/) | Wave 3 QA briefs — G (rules fuzz), H (auth/security), I (reconciliation) | ready to fire |
 
 ---
 
@@ -96,6 +98,46 @@ decision was simplified. All are applied in-place:
    moots Q6, removes the SPA path-policy caveat, and eliminates the only way Convex usage could
    grow without you adding someone deliberately. (§3.5)
 
+## Second verification pass — 2026-08-12
+
+The load-bearing factual claims were re-checked against primary sources by parallel research
+agents, because the docs had already been wrong five times. **The two biggest claims survived:
+the three-Access-applications AUD argument is confirmed by Cloudflare's own documentation, and
+the `auth.config.ts` snippet is correct field for field.** What changed:
+
+1. **`burkert.app` is registered** (06:16 UTC, Cloudflare Registrar). The plan's premise that
+   everything waits on the domain is obsolete — see [08-SEQUENCING.md](08-SEQUENCING.md).
+2. **"A Pages Function at `/admin/token`" cannot work.** Pages Functions are a Cloudflare *Pages*
+   construct and the plan hosts on *Workers* static assets. It needs a Worker `fetch` handler
+   with `run_worker_first` — and without that, navigating to the URL silently returns
+   `index.html` instead of the token. Corrected config in §7.5a.
+3. **Email OTP is no longer configured automatically.** Since 2026-06-18 new Zero Trust orgs
+   default to the Cloudflare identity provider; OTP must be added deliberately. §7.7 step 3 was
+   a no-op step and is now a real one.
+4. **Convex static hosting cannot replace Cloudflare Workers** — it exists, but custom domains
+   are Professional-plan-only, so on Free you get a `*.convex.site` hostname that cannot sit
+   behind Access. This answers the open question in the migration handoff: no.
+5. **`identity.email` is not guaranteed** on Convex's `customJwt` path, and `assertAllowlisted`
+   depends on it entirely. Unverifiable from docs; must be tested empirically. This is the
+   single most likely way the auth design fails on first contact.
+6. **The Convex spend-limit disable threshold disables every project on the team**, so all three
+   apps on one free team is a shared-fate decision, not a free lunch.
+7. **§3.8's T1 definition of done still contained the property test §3.4 had already declared
+   false.** Fixed — the correction had been applied in the prose but not in the DoD an agent
+   actually reads.
+8. **CI exists and has reported three green runs**, so requiring the `ci` check is safe now.
+   And `gh auth refresh` genuinely has no `-u` flag — but the scope it was meant to add is
+   already present, so the whole instruction was unnecessary.
+9. **125s origin timeout is all plans**, not Free-specific. **Namecheap's `.app` renewal is
+   $22.98**, not $17.98. **Render Starter is confirmed $7/mo** — and is still only 512 MB RAM.
+10. **The service-worker/Access conflict is not documented by Cloudflare** — keep the
+    mitigation, drop the citation. The hazard Cloudflare *does* document is closer to home: a
+    Worker route on the login path overwriting `cf-authorization`, which this architecture has.
+
+**Two claims could not be verified and are flagged rather than asserted:** whether External
+Evaluation is available on the Zero Trust Free plan, and whether `identity.email` survives the
+`customJwt` path. Neither should be designed around until checked.
+
 ## Sequencing
 
 ```
@@ -133,23 +175,54 @@ before the domain exists.
 - ✅ Squash-only merge settings and the `main` ruleset applied (§2.2, §2.3).
 - ✅ Handoffs delivered to both sibling repos — but **all three are still untracked** in their
   repos and will be lost if those working trees are cleaned. See §Handoffs.
-- ⬜ **CI (`ci.yml`) not added**, so the ruleset's `required_status_checks` rule is *not* in
-  place yet — the `ci` context doesn't exist, and requiring a check that can never report would
-  deadlock every PR. Adding it needs the `workflow` OAuth scope on the `mwburkert` account:
-  `gh auth refresh -h github.com -u mwburkert -s workflow`. Then add §2.4's workflow and extend
-  the ruleset.
-- ⬜ Repo conventions not added: gitleaks pre-commit hook, PR template, `AGENTS.md`/`CLAUDE.md`
-  (§2.5, §2.6). `.gitignore` **is** in place.
-- 🚨 **Unverified and urgent: is `DATABASE_URL` set in meal-planner's Render dashboard?** If not,
-  its SQLite file sits on Render's ephemeral filesystem and every pin, setting, saved plan, and
-  AI-usage counter is lost whenever the service sleeps. Check before anything else; the fix is
-  the Convex move. (§7.8)
-- 🔄 **§7 platform setup in flight as of 2026-08-12** — domain registration, Zero Trust team,
-  three Access Groups, three Access applications, and the `meals.burkert.app` cutover. The
+- ✅ **CI (`ci.yml`) exists and has reported three green runs** under the context name `ci`
+  (corrected 2026-08-12, second pass — the previous text said it was not added). It runs
+  `npm ci`, typecheck, test, build on `pull_request` and pushes to `main`.
+- ⬜ **The ruleset still has no `required_status_checks` rule.** Adding it is now **safe and
+  cheap** — the earlier warning about deadlocking against a context that has never existed no
+  longer applies, because the context exists and has reported. Do it.
+  > The old note here prescribed `gh auth refresh -h github.com -u mwburkert -s workflow`.
+  > **`gh auth refresh` has no `-u` flag** (confirmed against gh 2.96.0); for an inactive
+  > account you must `gh auth switch -u <user>` first. **But it is moot — `mwburkert` already
+  > holds the `workflow` scope.** No refresh is needed.
+- ⚠️ **`convex/` is not in the root `tsc -b`**, so CI typechecks none of the backend. Not a
+  one-liner: `convex/tsconfig.json` needs `composite: true` and must drop `noEmit`, and CI needs
+  `convex:codegen` first because `_generated/` is gitignored. See §8.3.
+- 🟡 Repo conventions: PR template and `AGENTS.md`/`CLAUDE.md` **do exist** (corrected
+  2026-08-12). Still missing: the **gitleaks pre-commit hook** (§2.5). `.gitignore` is in place.
+- ✅ **The `DATABASE_URL` question is answered** (2026-08-12, second pass). meal-planner's live
+  branch — `master`, **not** the stale `prepare-private-online-deployment` checked out at
+  `C:\dev\meal-planner` — has added Convex storage plus a guard, `assertLocalSqliteAllowed()`,
+  that throws only when `NODE_ENV === "production"`. ⚠️ **The SQLite fallback is still present**:
+  `@libsql/client` remains a dependency and `kvGet`/`kvList`/`kvSet` each still have a live
+  SQLite branch, taken whenever the Convex URL is empty. So the **web** service is protected
+  (because `next start` sets `NODE_ENV=production`) and the **new cron service is not**. The
+  data-loss bug is narrowed, not eliminated — see §8.4. **Two worse problems were found
+  alongside it — see §8.5.**
+- ✅ **`burkert.app` is registered** — 2026-08-12 06:16 UTC, Cloudflare Registrar, Cloudflare
+  nameservers, verified against Google Registry's RDAP. §7.7 step 1 is done; start from step 2.
+- 🔄 **§7 platform setup in flight as of 2026-08-12** — Zero Trust team, three Access Groups,
+  three Access applications, and the `meals.burkert.app` cutover. The
   meal-planner migration was **un-deferred** and now goes first, so it proves the pattern rather
   than following crokinole onto it (00-DECISIONS §In flight).
 - ⬜ Orca settings not yet applied — see the §1.7 checklist. The Orca project must also be
   pointed at `C:\dev\crokinole`; it was previously pointed at an empty, non-git directory at
   `C:\Users\mwbur\orca\projects\crokinole`, which is why Orca reported "no main branch connected".
-- ⬜ No application code written; Phase 1 has not started.
+- ✅ **Phase 1 is substantially built** (corrected 2026-08-12, second pass — the previous line
+  said no application code had been written). `packages/core` has 117 tests across 6 files;
+  `convex/` has schema plus 23 functions across 4 files; `apps/web` has all five screens plus
+  the board scorer. **`apps/web` is not yet wired to Convex** — it runs off `fixtures.ts` and
+  localStorage, deliberately, pending the migration.
+- ✅ **On branch `plan/remaining` as of 2026-08-12, all 23 Convex functions call
+  `assertAllowlisted` or `assertAdmin` as their literal first statement** (admin 5, games 10,
+  players 6, stats 2). No `action`, `internalMutation`, `internalQuery` or `httpAction` exports;
+  no `http.ts` or `crons.ts`. **Branch-qualified deliberately** — the migration branch is where
+  this surface is changing, so the claim goes stale the moment it lands.
+  > ⚠️ **This is not "QA agent H would pass today".** With `providers: []` (next bullet) every
+  > one of H's token attacks is refused for the same trivial reason, so they pass *vacuously*
+  > and prove nothing about AUD isolation. Only H's Task 1 enumeration is meaningfully
+  > exercisable right now. A real H run needs Access live.
+- ⚠️ **`auth.config.ts` emits `providers: []` when `CF_ACCESS_TEAM_DOMAIN` / `CF_ACCESS_AUD` are
+  unset**, so `getUserIdentity()` returns null and all 23 functions throw. It fails **closed**,
+  which is correct — but the app is entirely non-functional until both Convex env vars are set.
 - ⬜ The stale oh-heck checkout is deliberately untouched (deferred — see 00-DECISIONS).
