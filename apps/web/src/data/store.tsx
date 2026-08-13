@@ -98,6 +98,20 @@ interface StoreValue {
    */
   membersLoading: boolean;
 
+  /**
+   * True from the moment `createGame` is called until the new game has actually
+   * arrived on the games subscription.
+   *
+   * ⚠️ Load-bearing for the tab bar. `createGame` returns a `pending:` id
+   * synchronously and the entry screen navigates on it, but the game itself only
+   * exists once the Convex insert lands — so for that round trip
+   * `useLiveGame()` finds nothing in progress, which is indistinguishable from
+   * "no game is running" and made the board button flash *New* (a green plus,
+   * pointing at /games/new) immediately after the setup screen. This is the
+   * missing third state: not loading, not live, but a game being born.
+   */
+  isCreatingGame: boolean;
+
   players: Player[];
   games: GameWithRounds[];
   createGame: (input: NewGameInput) => string;
@@ -250,6 +264,14 @@ export function StoreProvider({ children }: { children: ReactNode }): ReactNode 
 
   /** Placeholder id → the real one, once `games.create` has answered. */
   const [pendingIds, setPendingIds] = useState<ReadonlyMap<string, string>>(() => new Map());
+
+  /**
+   * Placeholders handed out this session. A placeholder leaves this list only
+   * when the game behind it is visible in `games` — resolving the id is not
+   * enough, because the mutation can answer a beat before the subscription
+   * delivers the row, and that beat is exactly the window this exists to cover.
+   */
+  const [creating, setCreating] = useState<readonly string[]>([]);
 
   /**
    * The three queries every screen is built on. `memberRows` is excluded on
@@ -539,6 +561,8 @@ export function StoreProvider({ children }: { children: ReactNode }): ReactNode 
       const playerIds = [...input.teamA, ...input.teamB];
       type PlayerIdArg = Parameters<typeof createMutation>[0]["bets"][number]["playerId"];
 
+      setCreating((current) => [...current, placeholder]);
+
       // The scoring config is snapshotted server-side from the format (§3.2.3);
       // sending one from here would be a second place for the rules to live.
       fire(
@@ -560,17 +584,42 @@ export function StoreProvider({ children }: { children: ReactNode }): ReactNode 
             playerId: playerId as PlayerIdArg,
             amountCents: input.betCentsByPlayer[playerId] ?? 0,
           })),
-        }).then((gameId) => {
-          // Persisted as well as held in state: a reload mid-creation would
-          // otherwise leave the URL holding a placeholder nothing can resolve.
-          writePendingId(placeholder, gameId);
-          setPendingIds((current) => new Map(current).set(placeholder, gameId));
-        }),
+        })
+          .then((gameId) => {
+            // Persisted as well as held in state: a reload mid-creation would
+            // otherwise leave the URL holding a placeholder nothing can resolve.
+            writePendingId(placeholder, gameId);
+            setPendingIds((current) => new Map(current).set(placeholder, gameId));
+          })
+          .catch((error: unknown) => {
+            // A create that never lands must not leave the tab bar waiting
+            // forever for a game that isn't coming. Re-thrown so `fire` still
+            // logs it — this only takes the placeholder back out of the queue.
+            setCreating((current) => current.filter((id) => id !== placeholder));
+            throw error;
+          }),
       );
 
       return placeholder;
     },
     [createMutation, passcode],
+  );
+
+  /**
+   * Retire placeholders whose games have arrived.
+   *
+   * Derived during render rather than in an effect: the tab bar reads
+   * `isCreatingGame` on the same commit the game lands on, and an effect would
+   * leave it true for one extra frame — which is one extra frame of the wrong
+   * button, the exact fault this is here to remove.
+   */
+  const isCreatingGame = useMemo(
+    () =>
+      creating.some((placeholder) => {
+        const real = pendingIds.get(placeholder) ?? readPendingId(placeholder);
+        return real === undefined || !games.some((game) => game.id === real);
+      }),
+    [creating, pendingIds, games],
   );
 
   /** The optional half of a round, shaped the same for add and update. */
@@ -684,6 +733,7 @@ export function StoreProvider({ children }: { children: ReactNode }): ReactNode 
     () => ({
       isLoading,
       membersLoading,
+      isCreatingGame,
       players,
       games,
       createGame,
@@ -708,6 +758,7 @@ export function StoreProvider({ children }: { children: ReactNode }): ReactNode 
     [
       isLoading,
       membersLoading,
+      isCreatingGame,
       players,
       games,
       createGame,
