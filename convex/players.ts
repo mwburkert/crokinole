@@ -16,6 +16,7 @@
 import { MAX_NAME_LENGTH, normaliseName } from "@crokinole/core";
 import { v } from "convex/values";
 
+import { assertMayEdit } from "./admin";
 import { mutation, query } from "./_generated/server";
 import { assertAdmin, assertAllowlisted, authError, linkAuthSubject } from "./lib/auth";
 import { emailKey, nicknameOf, resolveNickname } from "./lib/players";
@@ -197,6 +198,16 @@ export const byEmail = query({
   },
 });
 
+/**
+ * Edit the three name fields.
+ *
+ * 🕐 The settings screen no longer calls this — its editors send all four
+ * fields, names and email together, through `admin.updateProfile`, which is the
+ * only handler that can move the allowlist entry alongside a changed address.
+ * This stays because it is a narrower capability than that one (no email, so no
+ * allowlist consequences) and because removing an exported function breaks
+ * whatever build is still deployed.
+ */
 export const updateNames = mutation({
   args: {
     passcode: v.string(),
@@ -216,6 +227,11 @@ export const updateNames = mutation({
     if (caller.role !== "admin" && caller.player?._id !== args.playerId) {
       throw authError("NOT_ALLOWED", "You can only edit your own details.");
     }
+    // The same protection `admin.updateProfile` applies. Both write `nickname`,
+    // so a second admin could otherwise rename the owner through this door
+    // while the other one refused them. 🕐 A no-op under the shared passphrase,
+    // where there is no caller identity to compare — see `assertMayEdit`.
+    if (player.email) assertMayEdit(caller.email, player.email);
 
     const patch: { firstName?: string; lastName?: string; nickname?: string } = {};
 

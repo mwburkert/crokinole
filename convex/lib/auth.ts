@@ -146,6 +146,30 @@ function tierFor(passcode: string): "admin" | "player" {
 }
 
 /**
+ * 🕐 INTERIM. The two codes themselves, for an admin to hand out.
+ *
+ * ⚠️ **This returns secrets. Every caller must `assertAdmin` first** — it is
+ * deliberately a plain function and not a query, so there is no way to reach it
+ * without going through a handler that has already run the check.
+ * `admin.inviteCodes` is the only caller and states the justification.
+ *
+ * It lives here rather than in `admin.ts` because this file is the one place
+ * that knows where the secrets are read from: `tierFor` compares against
+ * exactly these two env vars, and two readers that drift would mean the code on
+ * the QR is not the code the server accepts.
+ *
+ * `admin` is null when `ADMIN_PASSCODE` is unset, which is `tierFor`'s "there
+ * is no admin tier" case. Today that cannot be seen by an admin — you only
+ * *become* one by producing that code — but the null is honest rather than a
+ * "" that would render as a QR pointing at an invite nobody can accept.
+ */
+export function invitePasscodes(): { player: string; admin: string | null } {
+  const player = (process.env.APP_PASSCODE ?? "").trim();
+  const admin = (process.env.ADMIN_PASSCODE ?? "").trim();
+  return { player, admin: admin === "" ? null : admin };
+}
+
+/**
  * Resolve the caller, or throw.
  *
  * Call this first in **every** query and mutation. A function that returns data

@@ -26,7 +26,7 @@ import { MAX_NAME_LENGTH, normaliseName } from "@crokinole/core";
 
 import type { MutationCtx } from "./_generated/server";
 import { mutation, query } from "./_generated/server";
-import { assertAdmin, assertAllowlisted } from "./lib/auth";
+import { assertAdmin, assertAllowlisted, invitePasscodes } from "./lib/auth";
 import { nicknameOf, resolveNickname } from "./lib/players";
 
 const roleValidator = v.union(v.literal("admin"), v.literal("player"));
@@ -53,7 +53,11 @@ export const isSuperAdmin = (email: string): boolean => {
  * Throw if `target` is the super admin and the caller isn't them.
  *
  * Applies to every mutating path — role, name, email, revoke — so a second
- * admin can't quietly rename or lock out the owner.
+ * admin can't quietly rename or lock out the owner. Exported for
+ * `players.updateNames`, which writes the same nickname this file's
+ * `updateProfile` does: a guard that only half the doors carry is not a guard,
+ * and the settings screen having moved onto `updateProfile` is not a reason to
+ * leave the other door open.
  *
  * 🕐 A null `callerEmail` means the shared passphrase, which carries no
  * identity. The guard is allowed rather than refused in that case, and the
@@ -62,7 +66,7 @@ export const isSuperAdmin = (email: string): boolean => {
  * level. Refusing here would only stop the owner editing their own row from
  * their own app. The guard becomes real again the moment identities do.
  */
-function assertMayEdit(callerEmail: string | null, targetEmail: string): void {
+export function assertMayEdit(callerEmail: string | null, targetEmail: string): void {
   if (callerEmail === null) return;
   if (isSuperAdmin(targetEmail) && !isSuperAdmin(callerEmail)) {
     throw new Error("That account is managed by its owner and can't be changed here.");
@@ -158,6 +162,38 @@ export const listMembers = query({
 });
 
 /**
+ * 🕐 TEMPORARY (§7.1) — the two shared codes, so an admin can hand out either
+ * kind of invite. Goes with the passphrase when Cloudflare Access lands.
+ *
+ * ⚠️ **This is a secret leaving the server, so read the reasoning before
+ * touching it.** The settings screen offers a toggle between an admin invite and
+ * a player invite, and the QR has to carry the *chosen* code. The browser only
+ * ever holds one: an admin's localStorage has `ADMIN_PASSCODE`, so the player
+ * code is not derivable client-side. Something has to return it.
+ *
+ * Why that is safe to return *to an admin*: under the interim the tier is the
+ * whole of the capability model (`convex/lib/auth.ts`), and an admin already
+ * holds every capability the player code confers — `assertAdmin` is
+ * `assertAllowlisted` plus a strictly narrower role. Handing them the weaker
+ * secret grants them nothing they did not already have.
+ *
+ * Why it is still gated rather than open: it is a **secret**, and the player
+ * tier learning `ADMIN_PASSCODE` would be a straight privilege escalation — the
+ * one thing the two-code split exists to prevent. So `assertAdmin` is the first
+ * statement, before any argument is read, and a player-tier caller is refused
+ * outright. The web app skips this subscription entirely for a non-admin (a
+ * throwing `useQuery` takes the whole app down), and its invite card falls back
+ * to the code that caller already holds — no toggle, no admin QR, no throw.
+ */
+export const inviteCodes = query({
+  args: { passcode: v.string() },
+  handler: async (ctx, args) => {
+    await assertAdmin(ctx, args.passcode);
+    return invitePasscodes();
+  },
+});
+
+/**
  * Permit an email, creating the player record at the same time so they can be
  * picked for a game before they've ever opened the app (§3.6 — players are
  * people, not logins).
@@ -217,17 +253,37 @@ export const invite = mutation({
 });
 
 /**
- * Edit someone's name or email.
+ * Edit a person: their real name, the nickname every screen shows, and their
+ * email. **The one write behind every editor on the settings screen.**
  *
  * Non-admins reach this for themselves only — that's the whole of the settings
  * screen for a regular player.
+ *
+ * ⚠️ It gained `firstName` / `lastName` / `nickname` because the row editor now
+ * offers all four fields, and the alternative was two mutations per Save:
+ * `players.updateNames` for the names and this one for the email. Two writes
+ * for one form is two round trips and — worse — two outcomes, so a refusal on
+ * the second would leave the names changed and the address not, with the UI
+ * showing one error over a half-applied edit. Consolidating here rather than
+ * there is deliberate: this handler is the one holding `assertMayEdit`'s
+ * super-admin protection *and* the allowlist email move, and an email cannot be
+ * changed without both.
+ *
+ * `displayName` is kept as an alias for `nickname` and must not be removed: the
+ * currently-deployed web build still sends it, and this deployment is the one
+ * the owner's phone is pointed at. `nickname` wins when both arrive.
  */
 export const updateProfile = mutation({
   args: {
     passcode: v.string(),
     playerId: v.id("players"),
-    /** The nickname — what every screen shows. */
+    /** 🕐 Legacy alias for `nickname`, kept so an older client keeps working. */
     displayName: v.optional(v.string()),
+    firstName: v.optional(v.string()),
+    /** Empty clears it — a surname typed by mistake has to be removable. */
+    lastName: v.optional(v.string()),
+    /** The nickname — what every screen shows. */
+    nickname: v.optional(v.string()),
     email: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
@@ -243,15 +299,33 @@ export const updateProfile = mutation({
     }
     if (player.email) assertMayEdit(caller.email, player.email);
 
-    const patch: { nickname?: string; email?: string } = {};
+    const patch: {
+      firstName?: string;
+      lastName?: string | undefined;
+      nickname?: string;
+      email?: string;
+    } = {};
 
-    if (args.displayName !== undefined) {
-      const nickname = normaliseName(args.displayName);
-      if (!nickname) throw new Error("A player needs a nickname — it's what everyone sees.");
-      if (nickname.length > MAX_NAME_LENGTH) {
+    if (args.firstName !== undefined) {
+      const firstName = normaliseName(args.firstName);
+      if (!firstName) throw new Error("A player needs a first name.");
+      patch.firstName = firstName;
+    }
+
+    if (args.lastName !== undefined) {
+      // Explicit `undefined` removes the field rather than storing "", so a
+      // cleared surname is absent everywhere instead of rendering as a gap.
+      patch.lastName = normaliseName(args.lastName) || undefined;
+    }
+
+    const nickname = args.nickname ?? args.displayName;
+    if (nickname !== undefined) {
+      const normalised = normaliseName(nickname);
+      if (!normalised) throw new Error("A player needs a nickname — it's what everyone sees.");
+      if (normalised.length > MAX_NAME_LENGTH) {
         throw new Error(`Nicknames are capped at ${MAX_NAME_LENGTH} characters.`);
       }
-      patch.nickname = nickname;
+      patch.nickname = normalised;
     }
 
     if (args.email !== undefined) {

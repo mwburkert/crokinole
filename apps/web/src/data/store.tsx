@@ -146,19 +146,27 @@ interface StoreValue {
   /** True for the one account other admins can't edit. */
   isSuperAdmin: (email: string) => boolean;
   /**
-   * Add a person. An email is optional and today nobody has one: with no
-   * identity provider there is nothing to invite them *to*, so a name alone
-   * creates the player row that lets them be picked for a game (§3.6).
+   * Add a person, as an admin.
+   *
+   * **Email is required**, which supersedes the earlier "a name alone is
+   * enough" shape — every person now arrives with the one field that can tell a
+   * returning player from a second copy of them. Because there is always an
+   * address there is always an allowlist entry to make, so this goes through
+   * `admin.invite` rather than `players.create`.
+   *
+   * ⚠️ Awaited and allowed to reject, unlike most of this seam. `admin.invite`
+   * throws when the address is already on the list, and fired-and-forgotten that
+   * refusal was a console line plus a row that silently never appeared — the
+   * admin's only signal being a `+` sheet that closed as if it had worked.
    */
   addPlayer: (input: {
+    email: string;
     firstName: string;
     lastName?: string;
     /** Omitted means "pick one for me" — first name, or first + last initial. */
     nickname?: string;
-    /** Optional on this path; an admin can add someone with no email (§3.6). */
-    email?: string;
     role?: Role;
-  }) => void;
+  }) => Promise<void>;
   /**
    * Add yourself. Email is **required** here and is what stops a returning
    * player becoming a second row — deliberately unlike `addPlayer`.
@@ -171,10 +179,25 @@ interface StoreValue {
   }) => Promise<{ created: boolean }>;
   setRole: (email: string, role: Role) => void;
   revoke: (email: string) => void;
+  /**
+   * Edit a person: real name, nickname, email. One write, not one per field —
+   * see `admin.updateProfile`, which is the only handler that can move the
+   * allowlist entry alongside a changed address.
+   *
+   * Awaited for the same reason `addPlayer` is: the refusals here are ones a
+   * human has to read ("That account is managed by its owner"), and a silent
+   * one leaves an editor closing over an edit that never landed.
+   */
   updateProfile: (
     playerId: string,
-    changes: { displayName?: string; email?: string },
-  ) => void;
+    changes: {
+      firstName?: string;
+      /** Empty clears it. */
+      lastName?: string;
+      nickname?: string;
+      email?: string;
+    },
+  ) => Promise<void>;
 }
 
 const StoreContext = createContext<StoreValue | null>(null);
@@ -256,7 +279,6 @@ export function StoreProvider({ children }: { children: ReactNode }): ReactNode 
   const removeLastRoundMutation = useMutation(api.games.removeLastRound);
   const softDeleteMutation = useMutation(api.games.softDelete);
   const inviteMutation = useMutation(api.admin.invite);
-  const createPlayerMutation = useMutation(api.players.create);
   const selfJoinMutation = useMutation(api.players.selfJoin);
   const setRoleMutation = useMutation(api.admin.setRole);
   const revokeMutation = useMutation(api.admin.revoke);
@@ -396,50 +418,40 @@ export function StoreProvider({ children }: { children: ReactNode }): ReactNode 
   );
 
   const addPlayer = useCallback(
-    ({
+    async ({
+      email,
       firstName,
       lastName,
       nickname,
-      email,
       role,
     }: {
+      email: string;
       firstName: string;
       lastName?: string;
       nickname?: string;
-      email?: string;
       role?: Role;
-    }): void => {
+    }): Promise<void> => {
       const first = firstName.trim();
-      if (!first) return;
-      const normalised = email?.trim().toLowerCase();
+      const normalised = email.trim().toLowerCase();
+      // Both are refused server-side; throwing the same refusal from here keeps
+      // the sheet's error line the one place a failure shows up, rather than
+      // half the failures ending as a silent no-op.
+      if (!first) throw new Error("Give them a name so they can be picked for a game.");
+      if (!normalised.includes("@")) throw new Error("That doesn't look like an email address.");
 
-      if (normalised) {
-        // With an address they go on the allowlist too, which is what makes the
-        // row mean something once a login exists.
-        if (!normalised.includes("@")) return;
-        fire(
-          inviteMutation({
-            passcode,
-            email: normalised,
-            firstName: first,
-            ...(lastName?.trim() ? { lastName: lastName.trim() } : {}),
-            ...(nickname?.trim() ? { nickname: nickname.trim() } : {}),
-            ...(role ? { role } : {}),
-          }),
-        );
-        return;
-      }
-      // 🕐 The common case today: a name and nothing else.
-      fire(
-        createPlayerMutation({
-          passcode,
-          firstName: first,
-          ...(lastName?.trim() ? { lastName: lastName.trim() } : {}),
-          ...(nickname?.trim() ? { nickname: nickname.trim() } : {}),
-        }),
-      );
+      // An address means an allowlist entry as well as a player row, which is
+      // what makes the row mean something once a login exists. `admin.invite`
+      // writes both in one transaction, so there is no half-added person.
+      await inviteMutation({
+        passcode,
+        email: normalised,
+        firstName: first,
+        ...(lastName?.trim() ? { lastName: lastName.trim() } : {}),
+        ...(nickname?.trim() ? { nickname: nickname.trim() } : {}),
+        ...(role ? { role } : {}),
+      });
     },
-    [createPlayerMutation, inviteMutation, passcode],
+    [inviteMutation, passcode],
   );
 
   /**
@@ -489,7 +501,15 @@ export function StoreProvider({ children }: { children: ReactNode }): ReactNode 
   );
 
   const updateProfile = useCallback(
-    (playerId: string, changes: { displayName?: string; email?: string }): void => {
+    async (
+      playerId: string,
+      changes: {
+        firstName?: string;
+        lastName?: string;
+        nickname?: string;
+        email?: string;
+      },
+    ): Promise<void> => {
       /*
        * 🕐 The super-admin guard needs two identities to compare, and under the
        * shared passphrase there are none — `currentEmail` is "" for everyone.
@@ -498,25 +518,37 @@ export function StoreProvider({ children }: { children: ReactNode }): ReactNode 
        * the opposite of what it's for. `convex/admin.ts:assertMayEdit` skips it
        * on a null caller for the same reason; the two must agree, or this
        * refuses a write the server would have accepted.
+       *
+       * ⚠️ It throws rather than returning quietly now that the callers await
+       * it. A silent return under an awaited call reads as success, so the
+       * editor would close on "Saved ✓" over a write it had itself refused —
+       * the same class of lie this whole change is removing from the `+` sheet.
+       * The message is the server's, word for word, so the two paths are
+       * indistinguishable to the person reading them.
        */
       if (currentEmail !== "") {
         const member = members.find((row) => row.playerId === playerId);
-        if (member?.email && isSuperAdmin(member.email) && !isSuperAdmin(currentEmail)) return;
+        if (member?.email && isSuperAdmin(member.email) && !isSuperAdmin(currentEmail)) {
+          throw new Error("That account is managed by its owner and can't be changed here.");
+        }
       }
 
       const nextEmail = changes.email?.trim().toLowerCase();
-      // Truncate rather than let the server throw: the name field is a text
-      // input and over-typing it shouldn't lose the edit.
-      const nextName = changes.displayName?.trim().slice(0, MAX_NAME_LENGTH);
+      // Truncate rather than let the server throw: these are text inputs and
+      // over-typing one shouldn't lose the whole edit.
+      const cap = (value: string): string => value.trim().slice(0, MAX_NAME_LENGTH);
 
-      fire(
-        updateProfileMutation({
-          passcode,
-          playerId: playerId as Parameters<typeof updateProfileMutation>[0]["playerId"],
-          ...(nextName ? { displayName: nextName } : {}),
-          ...(nextEmail ? { email: nextEmail } : {}),
-        }),
-      );
+      await updateProfileMutation({
+        passcode,
+        playerId: playerId as Parameters<typeof updateProfileMutation>[0]["playerId"],
+        ...(changes.firstName !== undefined ? { firstName: cap(changes.firstName) } : {}),
+        // Sent even when empty — that is how a surname gets cleared. Every other
+        // field here treats blank as "leave it alone", so this one is the odd
+        // one out on purpose.
+        ...(changes.lastName !== undefined ? { lastName: cap(changes.lastName) } : {}),
+        ...(changes.nickname !== undefined ? { nickname: cap(changes.nickname) } : {}),
+        ...(nextEmail ? { email: nextEmail } : {}),
+      });
     },
     [currentEmail, isSuperAdmin, members, passcode, updateProfileMutation],
   );
