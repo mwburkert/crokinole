@@ -190,6 +190,14 @@ export default defineSchema({
 > *reasoning* below it still holds, but **`convex/schema.ts` is the source of truth** and it has
 > since gained: `rounds.discs` (the board scorer's stored positions, §3.5), `rounds.resultOverride`
 > (outcome known, points never recorded — how the 5 Aug night is stored), and `config.winBy`.
+>
+> **And `players.authUserId` no longer exists.** The real field is
+> `authSubject: v.optional(v.string())`, indexed as `by_auth` — `v.id("users")` assumed a Convex
+> Auth `users` table this app does not have. The identity is a Cloudflare Access JWT `subject`
+> **string**, not a document id. §3.6's "Players ≠ users" paragraph still names the old field;
+> the *principle* is unchanged and now load-bearing in a new place — a `players` row can exist
+> with no login and no email at all, which is exactly what §9's guest seats depend on.
+>
 > Read the real file before designing against this.
 
 **Why counts and not totals.** Entering `{twenties: 1, fifteens: 2, tens: 1}` instead of `60`
@@ -342,9 +350,15 @@ That deletes work rather than adding it:
 - **§7.4's SPA caveat disappears.** Path-based Access policies can't gate `/admin/*` reliably,
   because client-side navigation makes no HTTP request. With the **whole hostname** gated there
   is no path policy to defeat, and `/admin/token` can live anywhere.
-- **The egress blow-up vector is gone.** Anonymous spectators holding reactive subscriptions were
-  the only unbounded-audience surface. Usage can now only grow when you deliberately add someone
-  to the `Crokinole Players` Access Group.
+- **The unbounded-audience vector is gone.** Anonymous spectators holding reactive subscriptions
+  were the only unbounded-audience surface. Usage can now only grow when you deliberately add
+  someone to the `Crokinole Players` Access Group.
+  > ⚠️ **Wording corrected 2026-08-12 (second pass) — this said "the egress blow-up vector".**
+  > Convex defines *data egress* as file downloads, action bandwidth, log streams and backups;
+  > reactive query traffic is very likely metered as **function calls and Database I/O** instead.
+  > The conclusion is unchanged — it is about *audience*, not about which meter — but the metric
+  > name was wrong. See §9.9. Note that §9 (tables and spectators) reintroduces an audience
+  > *within* the allowlist, which is what §9.10 Q9 asks about.
 
 **What it costs:** you can't show the app to anyone who isn't on the allowlist. That's ~30 seconds
 in the Zero Trust dashboard. Carving a public route back out later is easy; the reverse isn't.
@@ -527,7 +541,7 @@ Definitions of done are deliberately testable — they're what the QA agents in 
 | # | Task | Owner | DoD |
 |---|---|---|---|
 | **T0** | Repo scaffold: workspaces, TS strict, Vite, Convex init, CI green | solo | `npm ci && npm run typecheck && npm test` passes on a PR |
-| **T1** | `packages/core`: types, `DEFAULT_SCORING`, `roundPoints`, `scoreRound`, `gameStanding`, `settle`, validators | agent A | Meets `vitest.config.ts`'s coverage thresholds (**95%**, not 100%); includes the 3-round-minimum test and a property test that **`settle()` never pays out on a level or incomplete game** (⚠️ see below) |
+| **T1** | `packages/core`: types, `DEFAULT_SCORING`, `roundPoints`, `scoreRound`, `gameStanding`, `settle`, validators | agent A | Meets `vitest.config.ts`'s coverage thresholds (**95%**, not 100%); includes the 3-round-minimum test and a property test that **every settlement sums to exactly zero**, over unequal stakes and indivisible pots (⚠️ see below) |
 | **T2** | `convex/schema.ts` + queries/mutations + `assertAllowlisted` | agent B | Schema deploys; a mutation called without auth throws; soft-delete hides from history but not from the DB |
 | **T3** | App shell: routing, design tokens, layout, auth wiring | agent C | All five routes render behind correct auth; installable as a PWA |
 | **T4** | Entry screen (§3.5) | agent D | A full 3-round game can be entered in under 60s on a phone; undo works |
@@ -547,11 +561,24 @@ Definitions of done are deliberately testable — they're what the QA agents in 
 > completed game is never level"* — which is **vacuously true of `gameStanding` by
 > construction**, since `isComplete` requires a non-`undefined` leader, so a level game can
 > never be complete whatever you feed it. Swapping a false property for an unfalsifiable one is
-> its own kind of failure, and it is recorded here rather than quietly fixed. The property now
-> asked for tests the **consumer**: *`settle()` never pays out on a level or incomplete game*.
-> That is falsifiable, because `settle` need not derive completion the same way `gameStanding`
-> does — and it is where money actually leaves. Full invariant list in
+> its own kind of failure, and it is recorded here rather than quietly fixed.
+>
+> ⚠️ **And the second replacement was still not right.** It asked that *`settle()` never pays
+> out on a level or incomplete game*, calling that falsifiable. It mostly isn't: `settle`
+> early-returns on `!standing.winner` and `gameStanding` sets `winner` only when `isComplete`,
+> so that holds by construction too. It is worth one line as a **cross-module regression
+> guard** — it would catch a future `settle` that cached a winner or derived completion
+> differently — but it is not a deep invariant.
+>
+> **The property this DoD now names is the genuinely falsifiable one:** *every settlement sums
+> to exactly zero*, exercised over unequal stakes and pots that do not divide evenly. That runs
+> through `potCents` and the largest-remainder allocation, which is real arithmetic that can go
+> wrong — and it is where the money actually is. Full invariant list in
 > `docs/qa/WAVE-3-G-RULES-FUZZ.md`.
+>
+> *Three drafts to land one property test is worth recording as its own lesson: "find a
+> property that money depends on" is much harder than it looks, and each near-miss looked
+> correct until it was checked against the code.*
 >
 > Also corrected: the DoD said "100% branch coverage on scoring". `vitest.config.ts` enforces
 > **95%**. The number in the DoD was never the number in the build.

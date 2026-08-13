@@ -87,12 +87,20 @@ integers, `discsUsed(counts) <= discsPerTeam(cfg)`, and a config that is either
      replacement for the false `target + 1` one. Swapping a false property for a
      vacuous one is its own kind of failure; it is recorded here so nobody
      reintroduces it.)*
-   - ✅ **Test the consumer instead — that is where money actually moves.**
-     Assert that **`settle()` never returns a non-empty payout for a game whose
-     match points are level**, and never pays out on an incomplete game. That is
-     falsifiable, because `settle` does not necessarily re-derive completion the
-     same way `gameStanding` does — so the two *can* disagree, and if they ever
-     do, somebody gets paid for a game nobody won.
+   - 🟡 **Test the consumer — but know exactly how strong that test is.** Assert
+     that **`settle()` never returns a non-empty payout for a level or
+     incomplete game.** ⚠️ **This is a cross-module regression guard, not a deep
+     invariant, and the second draft of this brief oversold it as "falsifiable".**
+     `settle` currently early-returns on `!standing.winner`, and `gameStanding`
+     sets `winner` only when `isComplete` — so today it too holds by
+     construction. Its real value is that it spans two modules: it would catch a
+     future `settle` that derived completion differently, cached a winner, or
+     trusted a stored field. Write it, in one line. Do not spend your budget on
+     it.
+   - ✅ **The genuinely falsifiable money property is item 9 below** — that a
+     settlement always sums to exactly zero. That one exercises real arithmetic
+     (`potCents`, largest-remainder allocation, duplicate bets), which can and
+     does go wrong. **Spend the effort there.**
    - Match points are non-decreasing as rounds are appended.
    - The 3-round minimum: no sequence of two rounds can complete a game at
      `targetMatchPoints: 5, matchPointsWin: 2, matchPointsTie: 1`.

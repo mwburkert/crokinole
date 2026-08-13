@@ -387,7 +387,10 @@ to migrate, and Vercel discourages being proxied by Cloudflare, though its state
 degraded Vercel Analytics, geo-targeting, and Firewall, none of which this app uses).
 
 **Convex free tier:** 1M function calls/mo, 0.5 GB DB, **1 GB egress/mo**, limits are **per team**
-with no project cap — all three projects on one free team. **Never sit on the Starter plan**: it
+with no project cap — all three projects on one free team. ⚠️ **That single "1 GB egress" line is
+suspect** — §9.9's research reads the current pricing page as carrying **two** distinct 1 GB
+lines, *Database I/O (bandwidth)* and *Data egress*. One of the two readings is wrong; re-read
+the live page before relying on either. **Never sit on the Starter plan**: it
 bills for overage, but the configurable spend cap (warning + disable thresholds) is a
 **Professional** feature. Go Free → Professional with a limit set on day one.
 
@@ -420,6 +423,23 @@ bills for overage, but the configurable spend cap (warning + disable thresholds)
 **1,500 games/month**; function calls bind at ~7,700. At 5–10 players and ~40 games/month you are
 at ~3% of it. Gating the leaderboard (§3.5) removes the only unbounded-audience surface, so usage
 can no longer grow without you deliberately adding someone to an Access Group.
+
+> ⚠️ **This arithmetic conflates two different meters — flagged 2026-08-12 (second pass), and
+> deliberately not re-derived here.** The Free/Starter plan carries **two separate 1 GB lines**:
+> *Database I/O (bandwidth)*, and *Data egress*. Convex defines **data egress** as *"downloading
+> files, bandwidth out of your actions, log streams, downloading your deployment backups"* —
+> **reactive query traffic to browsers is not in that list.** So "egress binds first" is very
+> likely measuring the wrong thing; what reactive reads actually pressure is **Database I/O**,
+> alongside function calls.
+>
+> The *conclusion* is not in doubt at 40 games a month — this app is at a few percent of any
+> limit. The **derivation** is, and it must be re-run against the right meter before anyone
+> leans on it for a bigger feature. §9 (tables and spectators) is the first thing in the plan
+> that could move these numbers; §9.9 carries the corrected version.
+>
+> **Genuinely undocumented:** whether websocket subscription bytes are metered as egress at all.
+> Convex's definition omits them and never affirmatively says they are free. Do not assume in
+> either direction — instrument.
 
 ---
 

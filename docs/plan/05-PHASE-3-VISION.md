@@ -106,6 +106,11 @@ a different job — sanity-checking disc counts and colours against your tracked
 view with the ring overlay, highlight the disputed disc, one tap to confirm. Faster than any
 inference and always correct.
 
+> **This composes with §9's tables model — noted 2026-08-12.** A table is a physical board and a
+> camera watches one board, so a table maps **1:1 onto a capture device** and the `gameId`
+> scoping below becomes table-scoped for free. The "viewer" role here and the "spectator" role
+> in §9 are the same concept arrived at from two directions. See §9.8.
+
 **Live streaming to other devices — trivial, and Convex is well suited**, provided you never
 push video through it:
 

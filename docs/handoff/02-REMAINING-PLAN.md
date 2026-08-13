@@ -118,7 +118,7 @@ needs stateful shot-by-shot diffing. §5.6 has the cheapest first experiment.
 - "Points not recorded" is a distinct state from "scored zero". Round points
   render "—" when a round carries only an outcome.
   > **Corrected 2026-08-12 (later):** this said the same applied to twenties.
-  > It no longer does. Twenties are now derived from team ring counts, which are
+  > It no longer does. Twenties are derived from team ring counts, which are
   > always known, so a team that sank none genuinely scored 0 and renders 0.
   > Marley's row is the illustration: `Pts/rd` "—", `20s` 0.
 
