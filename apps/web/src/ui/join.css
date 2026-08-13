@@ -1,32 +1,62 @@
 /*
- * The self-join sheet.
+ * Intake — the `/join` screen.
  *
- * The shell is `.overlay` / `.overlay__sheet` from `app.css` — the same pair the
- * round-entry scoreboard floats on, so there is one modal in this app and not
- * two that drift apart. Everything here dresses the form inside it.
+ * A full screen, not the overlay it started as: `/join` renders above the
+ * passcode gate so a person with no code can reach it, which means there is no
+ * app behind it to float on. It borrows the gate's proportions instead (see
+ * `.gate*` in app.css) — same board mark, same centred head, same 22–24rem
+ * column — because the two are the same kind of screen: the first thing a phone
+ * shows someone who isn't in yet.
  *
- * Phone-first: labels sit above their fields because at 393px a label beside a
- * field is the first thing to wrap badly, and every control inherits `.field` /
- * `.btn`, both of which are already `--tap` (48px) tall.
+ * Phone-first, sized for 393×852. Content is top-aligned rather than centred:
+ * this form is four fields tall, and centring it puts the email under the
+ * keyboard the moment it opens. Labels sit above their fields because at 393px a
+ * label beside a field is the first thing to wrap badly, and every control
+ * inherits `.field` / `.btn`, both already `--tap` (48px) tall.
  */
 
-.join__head {
+.join {
+  min-height: 100dvh;
   display: flex;
   align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--gap-sm);
-  margin-bottom: var(--gap);
+  justify-content: center;
+  padding: calc(env(safe-area-inset-top) + var(--gap)) var(--gap)
+    calc(env(safe-area-inset-bottom) + var(--gap-lg));
+}
+
+.join__inner {
+  width: 100%;
+  max-width: 23rem;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+}
+
+/*
+ * Smaller than the gate's 6.5rem. That screen is one field and can afford the
+ * mark; this one has four plus a warning that may appear, and every rem here is
+ * a rem the email field sits lower on a 852px phone.
+ */
+.join__board {
+  display: block;
+  width: 4rem;
+  height: 4rem;
+  margin: 0 auto;
+}
+
+.join__head {
+  text-align: center;
 }
 
 .join__title {
   margin: 0;
-  font-size: 1.05rem;
+  font-size: 1.35rem;
   font-weight: 800;
   letter-spacing: -0.01em;
 }
 
 .join__sub {
-  margin: 0.15rem 0 0;
+  margin: 0.2rem 0 0;
 }
 
 .join__form {
@@ -39,6 +69,24 @@
   display: flex;
   flex-direction: column;
   gap: var(--gap-xs);
+}
+
+/*
+ * Greyed out until the email resolves.
+ *
+ * Dimming the whole group, not just the input: the label and its hint are as
+ * much "not yet" as the box is, and a full-strength label over a dead field
+ * reads as a field you have failed to type into. `disabled` also removes them
+ * from the tab order, so a keyboard's Next button skips from the email straight
+ * to the button that is actually usable.
+ */
+.join__group--waiting {
+  opacity: 0.55;
+}
+
+.join__form .field:disabled {
+  background: var(--bg-sunken);
+  cursor: not-allowed;
 }
 
 /* Matches the gate's field label — the two are the same kind of thing. */
@@ -62,15 +110,26 @@
 }
 
 /*
- * Locked, not gone: the code stays readable so it can be checked against the one
- * they were handed, but it is `readonly` rather than `disabled` — disabled would
- * take it out of the accessibility tree entirely, and a field you can't reach is
- * not the same as a field you can't change.
+ * The lookup's running commentary, sitting between the email and the fields it
+ * governs — which is where the answer to "why can't I type in these?" has to be.
+ *
+ * The reserved height is the point. Its four messages are one or two lines at
+ * 393px, and letting it collapse to one moves every field below it up by ~20px
+ * exactly as the lookup settles — i.e. at the moment a thumb is heading for the
+ * first name box. Holding two lines' worth costs a little space in the shortest
+ * state and stops the form shifting under the hand in every state.
  */
-.join__field--locked {
-  background: var(--bg-sunken);
-  color: var(--ink-soft);
-  cursor: default;
+.join__note {
+  margin: 0;
+  min-height: 2.9em;
+}
+
+/* Overrides `.field`'s body size — a code is read back character by character. */
+.join__code {
+  text-align: center;
+  font-size: 1.15rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
 }
 
 .join__actions {
@@ -80,23 +139,25 @@
 }
 
 .join__done {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-sm);
   text-align: center;
-  padding: var(--gap-sm) 0 0;
 }
 
 .join__done-name {
-  margin: 0 0 0.25rem;
-  font-size: 1.15rem;
+  margin: var(--gap-sm) 0 0;
+  font-size: 1.35rem;
   font-weight: 800;
 }
 
 .join__done-note {
-  margin: 0 0 var(--gap);
+  margin: 0 0 var(--gap-sm);
 }
 
 /*
  * "There's already a Kinsey here." Shown when the email is new but the name
- * isn't — see the comment on `nameClash` in JoinSheet.tsx. Styled as a caution
+ * isn't — see the comment on `nameClash` in JoinScreen.tsx. Styled as a caution
  * rather than an error because nothing has gone wrong yet; the whole point is
  * that it appears *before* the write.
  */

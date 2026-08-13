@@ -169,14 +169,24 @@ export function usePasscode(): PasscodeValue {
 }
 
 /**
- * Throws if there is no passcode. Used inside the gate, where one is
- * guaranteed — every caller below `<PasscodeGate>` can treat this as a string
- * rather than threading a null through every Convex argument object.
+ * Throws if there is no passcode. For anywhere one is already guaranteed, so
+ * the caller can treat it as a string rather than threading a null through
+ * every Convex argument object.
+ *
+ * Two places qualify, not one: everything below `<PasscodeGate>`, and the join
+ * screen's second step — `/join` renders *beside* the gate (see `main.tsx`) and
+ * only reaches its form on the branch where `code !== null`. The throw is the
+ * backstop for a third caller getting it wrong, and it is a throw rather than a
+ * `""` because an empty passcode would sail into a Convex argument and come
+ * back as an auth failure three layers away from the mistake.
  */
 export function useRequiredPasscode(): string {
   const { code } = usePasscode();
   if (code === null) {
-    throw new Error("No passcode. useRequiredPasscode must be used inside <PasscodeGate>.");
+    throw new Error(
+      "No passcode. useRequiredPasscode needs a code already in context — inside " +
+        "<PasscodeGate>, or on a branch that has checked for one.",
+    );
   }
   return code;
 }
