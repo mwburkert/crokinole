@@ -11,6 +11,9 @@ import {
   type Region,
 } from "@crokinole/core";
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type PointerEvent, type ReactNode } from "react";
+import { createPortal } from "react-dom";
+
+import "../../ui/flash.css";
 
 /**
  * The board scorer (§3.5).
@@ -48,17 +51,69 @@ const HOLE_MAX_SCALE = 2.6;
 const SLOP = 10;
 
 /*
- * Everything lives inside one 200-wide box so the board never needs vertical
- * room it can't have on a phone. The piles sit in the box's corners rather than
- * directly in front of each seat — a circle in a square leaves the corners free,
- * whereas above and below the board there is nothing to spare.
+ * The +20 overlay, in three phases: bounce off the edges like a DVD
+ * screensaver, ease to rest in the middle of the SCREEN, then fade there.
+ * Long enough to be a moment, short enough that nobody is waiting on it.
  */
-const VIEW = 246;
-const BOARD_TOP = 32;
+const TWENTY_BOUNCE_MS = 1500;
+const TWENTY_SETTLE_MS = 800;
+const TWENTY_REST_MS = 500;
+const TWENTY_FLASH_MS = TWENTY_BOUNCE_MS + TWENTY_SETTLE_MS + TWENTY_REST_MS;
+/** Screensaver speed, in CSS pixels per millisecond. */
+const TWENTY_SPEED = 0.42;
 
-/** Board space (0–200, centred 100,100) -> SVG space. */
+/*
+ * Everything lives inside one box that the board exactly fills, so the board
+ * never needs vertical room it can't have on a phone. The piles sit in the
+ * box's bottom corners rather than directly in front of each seat — a circle in
+ * a square leaves the corners free, whereas above and below the board there is
+ * nothing to spare.
+ *
+ * ⚠️ **The board is no longer 200 units across.** Widening the gutter pushed
+ * `RADII.ditch` out to 114, so the rim overhangs core's 0–200 board space by 14
+ * on each side. The view box is padded by exactly that much, `toView` carries
+ * the offset and `pointAt` undoes it. Every literal 100 or 200 that used to
+ * appear here was a board centre or a board width; they are `CENTRE_X`,
+ * `CENTRE_Y` and `VIEW_W` now, and derived, so widening the gutter again moves
+ * the whole drawing rather than tearing a hole in it.
+ *
+ * The box is deliberately no taller for its width than it was (274 ÷ 228 = 1.20
+ * against the old 246 ÷ 200 = 1.23), which matters: `.scorer__svg` is capped at
+ * 21.5rem so the whole round-entry screen clears a 393×852 phone without
+ * scrolling, and at that cap this draws ~413px tall — ten short of what it drew
+ * before, and 250px in the 13rem box a `readOnly` replay sits in. The board is
+ * the same size on screen as it always was; it is the playing surface inside it
+ * that gives up the room the gutter gained.
+ */
+
+/** Board radius in board units: the outer lip of the ditch. */
+const BOARD_R = RADII.ditch;
+/** How far the rim overhangs core's 0–200 box, each side. */
+const PAD_X = BOARD_R - BOARD_CENTRE;
+/** View box width — the board, edge to edge. */
+const VIEW_W = BOARD_R * 2;
+/** Baseline of the two twenty-stashes, in the strip above the board. */
+const STASH_Y = 14;
+/** Inset of the first disc in each stash from its side of the box. */
+const STASH_X = 9;
+/**
+ * Where board space begins, vertically.
+ *
+ * Sized so the rim clears the stash row by about a disc. It was 32 back when
+ * the rim sat at radius 100; the extra 14 is the gutter the rim gained, or the
+ * stashes would be sitting on the board.
+ */
+const BOARD_TOP = 46;
+/** Room under the board for the piles and their counts. */
+const BOARD_FOOT = 14;
+const VIEW_H = BOARD_TOP + BOARD_CENTRE + BOARD_R + BOARD_FOOT;
+/** The centre of the board, in view space. */
+const CENTRE_X = BOARD_CENTRE + PAD_X;
+const CENTRE_Y = BOARD_CENTRE + BOARD_TOP;
+
+/** Board space (centred 100,100) -> SVG space. */
 const toView = (x: number, y: number): { x: number; y: number } => ({
-  x,
+  x: x + PAD_X,
   y: y + BOARD_TOP,
 });
 
@@ -84,10 +139,19 @@ interface Drag {
  * They are also the colour selector: **tap to select, hold-and-drag to take a
  * disc.** That collapses two controls into one — the pile you reach for is the
  * colour you meant, so there was never a reason to state it separately first.
+ *
+ * These are in VIEW space, not board space. They are furniture around the
+ * board rather than anything on it, and with the rim now reaching both sides of
+ * the box the only room left is the corners the circle can't fill. Placed far
+ * enough out that even a pile's oversized press target (`DISC_RADIUS + 13`)
+ * stays clear of the rim — it used to clear it by 9 units and, left where it
+ * was, the wider board would have swallowed 5 of them.
  */
+const PILE_INSET = 20;
+const PILE_Y = VIEW_H - 20;
 const PILES: { x: number; y: number; team: "A" | "B" }[] = [
-  { x: 13, y: 194, team: "A" },
-  { x: 187, y: 194, team: "B" },
+  { x: PILE_INSET, y: PILE_Y, team: "A" },
+  { x: VIEW_W - PILE_INSET, y: PILE_Y, team: "B" },
 ];
 
 export interface BoardScorerProps {
@@ -126,13 +190,21 @@ export function BoardScorer({
     null,
   );
 
+  /**
+   * The small flashes — `+5 / +10 / +15` and `Gutter!` — drawn as SVG text at
+   * the disc that earned them. A twenty is deliberately NOT one of these: it
+   * gets the whole screen (see `TwentyFlash`), which an SVG text node trapped in
+   * this view box could never have.
+   */
   const [flash, setFlash] = useState<{
     id: number;
     text: string;
     x: number;
     y: number;
-    kind: "points" | "gutter" | "twenty";
+    kind: "points" | "gutter";
   } | null>(null);
+  /** The live +20 overlay, keyed so a second twenty restarts the animation. */
+  const [twenty, setTwenty] = useState<number | null>(null);
 
   /**
    * How far the centre hole has opened up, 0–1.
@@ -185,12 +257,13 @@ export function BoardScorer({
     const svg = svgRef.current;
     if (!svg) return null;
     const rect = svg.getBoundingClientRect();
-    // The viewBox is 200 units WIDE (VIEW is its height). Scaling by the height
-    // put every pointer position 21% off — far enough that a grabbed disc
-    // appeared to lag the finger and a press on a disc often missed it entirely.
-    const scale = 200 / rect.width;
+    // Scale by the WIDTH against the view box's width. Using its height put
+    // every pointer position 21% off — far enough that a grabbed disc appeared
+    // to lag the finger and a press on a disc often missed it entirely.
+    const scale = VIEW_W / rect.width;
+    // …then undo what `toView` added, so this lands back in board space.
     return {
-      x: (event.clientX - rect.left) * scale,
+      x: (event.clientX - rect.left) * scale - PAD_X,
       y: (event.clientY - rect.top) * scale - BOARD_TOP,
     };
   }, []);
@@ -213,26 +286,34 @@ export function BoardScorer({
   };
 
   const showFlash = (region: Region, x: number, y: number): void => {
-    const points = pointsFor(region);
     flashId.current += 1;
     const id = flashId.current;
 
-    const kind = region === "twenty" ? "twenty" : region === "ditch" ? "gutter" : "points";
-    const text = region === "ditch" ? "Gutter!" : `+${points}`;
-    // Centre the twenty on the board rather than on the disc — it's an event,
-    // not an annotation.
+    // A twenty leaves the board entirely. It is the event of the round, so it
+    // is thrown across the whole viewport rather than annotated onto a disc —
+    // and "the middle of the page" is not somewhere an SVG child of this view
+    // box can reach.
+    if (region === "twenty") {
+      setTwenty(id);
+      window.setTimeout(
+        () => setTwenty((current) => (current === id ? null : current)),
+        TWENTY_FLASH_MS,
+      );
+      return;
+    }
+
+    const kind = region === "ditch" ? "gutter" : "points";
+    const text = region === "ditch" ? "Gutter!" : `+${pointsFor(region)}`;
     // Clamp inside the viewBox — a "Gutter!" against the left or right rim was
-    // being cut in half by the edge of the SVG.
-    const at =
-      region === "twenty"
-        ? { x: BOARD_CENTRE, y: BOARD_CENTRE + BOARD_TOP }
-        : { x: Math.min(Math.max(x, 26), 174), y: Math.max(y, 12) };
+    // being cut in half by the edge of the SVG — and keep it below the stash
+    // row, which owns the strip along the top.
+    const at = {
+      x: Math.min(Math.max(x, 26), VIEW_W - 26),
+      y: Math.max(y, STASH_Y + 12),
+    };
 
     setFlash({ id, text, kind, ...at });
-    window.setTimeout(
-      () => setFlash((current) => (current?.id === id ? null : current)),
-      region === "twenty" ? 2600 : 1500,
-    );
+    window.setTimeout(() => setFlash((current) => (current?.id === id ? null : current)), 1500);
   };
 
   /**
@@ -245,7 +326,8 @@ export function BoardScorer({
   const launchTwenty = (color: DiscColor): void => {
     flashId.current += 1;
     const id = flashId.current;
-    setSinking({ id, color, to: color === colorA ? 7 : 193 });
+    // It lands on the near end of its own stash row, just outside the first slot.
+    setSinking({ id, color, to: color === colorA ? STASH_X - 2 : VIEW_W - STASH_X + 2 });
     window.setTimeout(() => setSinking((c) => (c?.id === id ? null : c)), 900);
   };
 
@@ -430,7 +512,7 @@ export function BoardScorer({
     <div className="scorer">
       <svg
         ref={svgRef}
-        viewBox={`0 0 200 ${VIEW}`}
+        viewBox={`0 0 ${VIEW_W} ${VIEW_H}`}
         className="scorer__svg"
         style={readOnly ? { pointerEvents: "none" } : undefined}
         onPointerDown={(event) => {
@@ -453,9 +535,9 @@ export function BoardScorer({
         {sinking ? (
           <circle
             key={`flare-${sinking.id}`}
-            cx={BOARD_CENTRE}
-            cy={BOARD_CENTRE + BOARD_TOP}
-            r={RADII.ditch}
+            cx={CENTRE_X}
+            cy={CENTRE_Y}
+            r={BOARD_R}
             className="scorer__flare"
           />
         ) : null}
@@ -463,20 +545,26 @@ export function BoardScorer({
 
         {/* Twenties, laid out in a row directly under each score card so the
             two sides read at a glance without anyone counting a number. */}
-        <Stash x={9} color={colorA} count={twentiesOf(colorA)} onDown={handleDown} />
-        <Stash x={191} color={colorB} count={twentiesOf(colorB)} onDown={handleDown} rightAligned />
+        <Stash x={STASH_X} color={colorA} count={twentiesOf(colorA)} onDown={handleDown} />
+        <Stash
+          x={VIEW_W - STASH_X}
+          color={colorB}
+          count={twentiesOf(colorB)}
+          onDown={handleDown}
+          rightAligned
+        />
 
         {/* One pile per colour: tap selects, hold-and-drag takes a disc. A
-            replayed round has none left to take, so they simply aren't there. */}
+            replayed round has none left to take, so they simply aren't there.
+            Already in view space — see PILES. */}
         {(readOnly ? [] : PILES).map((pile, index) => {
           const color = pile.team === "A" ? colorA : colorB;
-          const view = toView(pile.x, pile.y);
           return (
             <Pile
               key={index}
               seat={index}
-              x={view.x}
-              y={view.y}
+              x={pile.x}
+              y={pile.y}
               color={color}
               count={left[color]}
               total={perTeam}
@@ -541,10 +629,10 @@ export function BoardScorer({
             className={`scorer__disc scorer__disc--${sinking.color} scorer__sink`}
             style={
               {
-                "--sink-x0": `${BOARD_CENTRE}px`,
-                "--sink-y0": `${BOARD_CENTRE + BOARD_TOP}px`,
+                "--sink-x0": `${CENTRE_X}px`,
+                "--sink-y0": `${CENTRE_Y}px`,
                 "--sink-x1": `${sinking.to}px`,
-                "--sink-y1": "14px",
+                "--sink-y1": `${STASH_Y}px`,
               } as CSSProperties
             }
           />
@@ -562,6 +650,7 @@ export function BoardScorer({
         ) : null}
       </svg>
 
+      {twenty === null ? null : <TwentyFlash key={twenty} />}
     </div>
   );
 }
@@ -575,8 +664,8 @@ function BoardArt({
 }): ReactNode {
   const ring = (region: Region, r: number, fill: string): ReactNode => (
     <circle
-      cx={BOARD_CENTRE}
-      cy={BOARD_CENTRE + BOARD_TOP}
+      cx={CENTRE_X}
+      cy={CENTRE_Y}
       r={r}
       fill={fill}
       className={hover === region ? "scorer__ring is-hover" : "scorer__ring"}
@@ -587,7 +676,7 @@ function BoardArt({
 
   return (
     <g style={{ pointerEvents: "none" }}>
-      {ring("ditch", RADII.ditch, "var(--felt-deep)")}
+      {ring("ditch", BOARD_R, "var(--felt-deep)")}
       {ring("five", RADII.five, "var(--maple)")}
       {ring("ten", RADII.ten, "var(--maple-deep)")}
       {ring("fifteen", RADII.fifteen, "var(--maple)")}
@@ -596,16 +685,16 @@ function BoardArt({
         return (
           <circle
             key={index}
-            cx={BOARD_CENTRE + Math.cos(angle) * RADII.fifteen}
-            cy={BOARD_CENTRE + BOARD_TOP + Math.sin(angle) * RADII.fifteen}
+            cx={CENTRE_X + Math.cos(angle) * RADII.fifteen}
+            cy={CENTRE_Y + Math.sin(angle) * RADII.fifteen}
             r="2.2"
             fill="var(--walnut)"
           />
         );
       })}
       <circle
-        cx={BOARD_CENTRE}
-        cy={BOARD_CENTRE + BOARD_TOP}
+        cx={CENTRE_X}
+        cy={CENTRE_Y}
         r={RADII.twenty * (1 + holeGrow * (HOLE_MAX_SCALE - 1))}
         fill="var(--twenty)"
         stroke="var(--walnut-soft)"
@@ -636,8 +725,8 @@ function RegionHighlight({ region }: { region: Region | null }): ReactNode {
   return (
     <g style={{ pointerEvents: "none" }} className="scorer__zone">
       <circle
-        cx={BOARD_CENTRE}
-        cy={BOARD_CENTRE + BOARD_TOP}
+        cx={CENTRE_X}
+        cy={CENTRE_Y}
         r={mid}
         fill="none"
         strokeWidth={outer - inner}
@@ -646,8 +735,8 @@ function RegionHighlight({ region }: { region: Region | null }): ReactNode {
       {[inner, outer].map((r) => (
         <circle
           key={r}
-          cx={BOARD_CENTRE}
-          cy={BOARD_CENTRE + BOARD_TOP}
+          cx={CENTRE_X}
+          cy={CENTRE_Y}
           r={r}
           fill="none"
           className={`scorer__zoneedge${region === "ditch" ? " is-ditch" : ""}`}
@@ -732,12 +821,151 @@ function Stash({
         <circle
           key={index}
           cx={rightAligned ? x - index * step : x + index * step}
-          cy={14}
+          cy={STASH_Y}
           r={DISC_RADIUS * 0.85}
           className={`scorer__disc scorer__disc--${color}`}
         />
       ))}
     </g>
+  );
+}
+
+/**
+ * The +20, thrown across the whole screen.
+ *
+ * ⚠️ **This is not part of the board.** It bounces off the edges of the
+ * viewport like a DVD screensaver, eases to rest in the middle of the *page*,
+ * and fades there. An SVG `<text>` could never do that: it is trapped in the
+ * board's view box, so "centred on the page" would only ever have meant centred
+ * on the board — and the board is a 21.5rem square somewhere near the top of a
+ * phone screen. So this is a `position: fixed` DOM overlay, portalled to
+ * `<body>` so that `.scorer`'s stacking context (z-index 15, below the tab bar)
+ * can't trap it either.
+ *
+ * It is `pointer-events: none` from root to leaf. It covers the entire screen
+ * for nearly three seconds, including the *Finish round* button — eating one tap
+ * there would be worse than never showing it at all.
+ *
+ * The small `+5 / +10 / +15 / Gutter!` flashes stayed behind as SVG text on
+ * purpose: those annotate a disc, so they belong where the disc is.
+ */
+function TwentyFlash(): ReactNode {
+  const markRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const mark = markRef.current;
+    if (!mark) return;
+
+    /** Top-left the mark would sit at to be dead centre on screen. */
+    const restingPlace = (): { x: number; y: number } => ({
+      x: (window.innerWidth - mark.offsetWidth) / 2,
+      y: (window.innerHeight - mark.offsetHeight) / 2,
+    });
+    const place = (x: number, y: number): void => {
+      mark.style.transform = `translate3d(${x}px, ${y}px, 0)`;
+    };
+
+    let reduced = false;
+    try {
+      reduced = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true;
+    } catch {
+      // No matchMedia to ask — assume motion is welcome.
+    }
+
+    // Reduced motion: it appears where it was always going to end up and just
+    // fades, the same courtesy app.css already extends to the rest of the
+    // twenty's fanfare. No bouncing, and flash.css drops the colour cycling too.
+    if (reduced) {
+      const rest = restingPlace();
+      place(rest.x, rest.y);
+      return;
+    }
+
+    let limitX = Math.max(0, window.innerWidth - mark.offsetWidth);
+    let limitY = Math.max(0, window.innerHeight - mark.offsetHeight);
+    let x = Math.random() * limitX;
+    let y = Math.random() * limitY;
+    // A diagonal heading, tilted a little at random and sent off in a random
+    // quadrant, so two twenties in a row don't trace the same path.
+    const angle = Math.PI / 4 + (Math.random() - 0.5) * 0.7;
+    let vx = Math.cos(angle) * TWENTY_SPEED * (Math.random() < 0.5 ? -1 : 1);
+    let vy = Math.sin(angle) * TWENTY_SPEED * (Math.random() < 0.5 ? -1 : 1);
+    place(x, y);
+
+    // Same shape as the hole-open animation above: one rAF loop, cancelled on
+    // unmount. This one writes the transform straight onto the node instead of
+    // going through state — it runs every frame for 2.3 seconds, and there is
+    // nothing else on this element for React to reconcile.
+    let raf = 0;
+    const started = performance.now();
+    let previous = started;
+    /** Where the bounce ended, captured once so the settle eases from a fixed point. */
+    let handoff: { x: number; y: number } | null = null;
+
+    const step = (now: number): void => {
+      // A backgrounded tab hands back one enormous frame; capped, or the mark
+      // teleports off screen and bounces back from somewhere it never was.
+      const dt = Math.min(now - previous, 34);
+      previous = now;
+      const elapsed = now - started;
+
+      if (elapsed < TWENTY_BOUNCE_MS) {
+        // Re-read each frame: a phone that rotates mid-flash changes the walls.
+        limitX = Math.max(0, window.innerWidth - mark.offsetWidth);
+        limitY = Math.max(0, window.innerHeight - mark.offsetHeight);
+        x += vx * dt;
+        y += vy * dt;
+        if (x < 0) {
+          x = -x;
+          vx = -vx;
+        } else if (x > limitX) {
+          x = 2 * limitX - x;
+          vx = -vx;
+        }
+        if (y < 0) {
+          y = -y;
+          vy = -vy;
+        } else if (y > limitY) {
+          y = 2 * limitY - y;
+          vy = -vy;
+        }
+        place(x, y);
+      } else if (elapsed < TWENTY_BOUNCE_MS + TWENTY_SETTLE_MS) {
+        handoff ??= { x, y };
+        const rest = restingPlace();
+        // Ease out: it arrives slowing down, which is what makes it read as
+        // coming to rest rather than being cut off mid-bounce.
+        const progress = (elapsed - TWENTY_BOUNCE_MS) / TWENTY_SETTLE_MS;
+        const eased = 1 - (1 - progress) ** 3;
+        place(
+          handoff.x + (rest.x - handoff.x) * eased,
+          handoff.y + (rest.y - handoff.y) * eased,
+        );
+      } else {
+        // Parked. The fade is CSS's from here, so the loop stops rather than
+        // spinning for the last half second.
+        const rest = restingPlace();
+        place(rest.x, rest.y);
+        return;
+      }
+      raf = requestAnimationFrame(step);
+    };
+
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, []);
+
+  return createPortal(
+    <div className="twentyflash" aria-hidden="true">
+      {/* Two nodes on purpose: the outer one carries the JS-driven position,
+          the inner one the CSS pop and colour cycle. One node can't do both —
+          a CSS animation on `transform` would overwrite the position every
+          frame. */}
+      <div className="twentyflash__mark" ref={markRef}>
+        <span className="twentyflash__text">+20</span>
+      </div>
+    </div>,
+    document.body,
   );
 }
 

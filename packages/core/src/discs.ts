@@ -7,8 +7,12 @@
  * §3.5. The rule that keeps it honest lives here: `countsFromDiscs` is the only
  * way counts are produced from a placed board, so the two can never disagree.
  *
- * All coordinates are in the board's own 0–200 space with the centre at
- * (100, 100), independent of how large it's drawn.
+ * All coordinates are in the board's own space, centred at
+ * (`BOARD_CENTRE`, `BOARD_CENTRE`) = (100, 100), independent of how large it's
+ * drawn. That space was 0–200 while the outer lip sat at radius 100; widening
+ * the gutter pushed `RADII.ditch` past it, so the rim now reaches −14 and 214.
+ * Nothing here assumes a bound — every function works off the radius from the
+ * centre — and the renderer pads its view box by the difference.
  */
 
 import type { DiscColor, PlacedDisc, Region, RingCounts } from "./types.js";
@@ -33,11 +37,18 @@ export const RADII = {
   /**
    * Outer lip of the ditch. Beyond this isn't the board at all.
    *
-   * Must leave a band at least one disc wide (2 × `DISC_RADIUS`) outside the
-   * playing surface, or a ditched disc could never sit wholly inside it and
-   * every drop there would snap somewhere misleading.
+   * Must leave a band at least one disc wide (2 × `DISC_RADIUS` = 11) outside
+   * the playing surface, or a ditched disc could never sit wholly inside it and
+   * every drop there would snap somewhere misleading. `snapIntoRegion` guards
+   * against that case and `discs.test.ts` asserts no band is ever that narrow.
+   *
+   * 114 leaves a gutter of 28 — twice the 14 it started with, which was barely
+   * the one disc the rule demands and left a ditched disc almost nowhere to be.
+   * **Widen from the outside, by raising this.** Never by lowering `five`:
+   * narrowing a band is the direction the guard exists to catch, and it would
+   * squash the 5-ring to buy room the ditch can simply be given.
    */
-  ditch: 100,
+  ditch: 114,
 } as const;
 
 /** Distance from the centre of the board. */

@@ -1,0 +1,102 @@
+/*
+ * The +20 overlay.
+ *
+ * Sinking a twenty is the best thing that happens in a round, and the flash for
+ * it used to be an SVG `<text>` at the middle of the board — which meant it
+ * could never be centred on the *page*, only on a 21.5rem square somewhere near
+ * the top of it. So the twenty left the board: it is a fixed-position DOM
+ * overlay now, portalled to `<body>` by `BoardScorer`, bouncing off the edges of
+ * the viewport like a DVD screensaver before coming to rest in the middle of the
+ * screen and fading.
+ *
+ * Everything else the twenty does is unchanged and lives in `app.css`: the disc
+ * flying to its stash (`.scorer__sink`), the board flaring through the spectrum
+ * (`.scorer__flare`), and the small `+5 / +10 / +15 / Gutter!` flashes that stay
+ * where their disc is (`.scorer__flash`).
+ *
+ * ⚠️ **Nothing here may take a pointer event.** This covers the whole screen for
+ * nearly three seconds, *Finish round* included. A flourish that swallows a tap
+ * is worse than no flourish.
+ */
+
+.twentyflash {
+  position: fixed;
+  inset: 0;
+  /* Over everything: the scoreboard sheet is 40, the tab bar and top bar 20. */
+  z-index: 60;
+  pointer-events: none;
+  /* The mark is positioned by JS in viewport pixels; anything that overshoots
+     during a bounce is clipped here rather than growing the page. */
+  overflow: hidden;
+}
+
+/*
+ * The mark carries POSITION only — `BoardScorer` writes `transform: translate3d`
+ * onto it every frame. Nothing in this file may animate its transform, or the
+ * bounce would be overwritten sixty times a second.
+ */
+.twentyflash__mark {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  will-change: transform;
+}
+
+/* …and the text carries the LIFE: pop in, hold, swell out and fade, cycling
+   through the spectrum the whole way. Same colours as `rainbow` in app.css,
+   which can't be reused because it animates `fill` for SVG and this is DOM. */
+.twentyflash__text {
+  display: block;
+  font-family: var(--font-num);
+  font-size: 3.25rem;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+  text-shadow: 0 2px 12px rgb(0 0 0 / 0.45);
+  /* 2800ms end to end, matching TWENTY_FLASH_MS in BoardScorer.tsx: 1500 of
+     bouncing, 800 easing to the centre, 500 at rest. The keyframes below are
+     laid out against that total — 82% is the moment it stops moving. */
+  animation:
+    twentyflash-life 2800ms ease-out forwards,
+    twentyflash-rainbow 700ms linear infinite;
+}
+
+@keyframes twentyflash-life {
+  0% { opacity: 0; transform: scale(0.4); }
+  5% { opacity: 1; transform: scale(1.35); }
+  11% { opacity: 1; transform: scale(1); }
+  82% { opacity: 1; transform: scale(1); }
+  90% { opacity: 1; transform: scale(1.28); }
+  100% { opacity: 0; transform: scale(1.45); }
+}
+
+@keyframes twentyflash-rainbow {
+  0% { color: #e0473a; }
+  25% { color: #e0a13a; }
+  50% { color: #3ba85e; }
+  75% { color: #3a76e0; }
+  100% { color: #e0473a; }
+}
+
+/*
+ * The same courtesy app.css extends to the rest of the twenty's fanfare.
+ * `BoardScorer` skips the bounce and parks the mark centred; here the pop and
+ * the colour cycle go too, leaving a plain fade in one steady colour. Colour
+ * cycling is motion by another name, and a full-screen strobe is exactly what
+ * this setting is asking us not to do.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .twentyflash__text {
+    color: var(--accent);
+    animation: twentyflash-fade 2800ms ease-out forwards;
+  }
+}
+
+@keyframes twentyflash-fade {
+  0% { opacity: 0; }
+  8% { opacity: 1; }
+  82% { opacity: 1; }
+  100% { opacity: 0; }
+}
